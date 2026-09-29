@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>משחק זיכרון - מכבי נתניה</title>
+  <link rel="stylesheet" href="../../style.css">
+  <style>
+    .memory-grid {
+      display: grid;
+      gap: 10px;
+      max-width: 720px;
+      margin: 0 auto 25px;
+    }
+    .card {
+      aspect-ratio: 0.75;
+      border-radius: 12px;
+      cursor: pointer;
+      position: relative;
+      transform-style: preserve-3d;
+      transition: transform 0.4s;
+    }
+    .card.flipped { transform: rotateY(180deg); }
+    .card.matched { opacity: 0.55; cursor: default; }
+    .card-face {
+      position: absolute;
+      inset: 0;
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      backface-visibility: hidden;
+    }
+    .card-back {
+      background: linear-gradient(135deg, #ffcc00, #e6b800);
+      border: 3px solid #b38f00;
+      font-size: 2em;
+    }
+    .card-front {
+      background: linear-gradient(135deg, #001a3d, #003087);
+      border: 3px solid #4a8ccc;
+      transform: rotateY(180deg);
+      padding: 5px;
+    }
+    .card-front img {
+      width: 100%;
+      height: 72%;
+      object-fit: cover;
+      border-radius: 6px;
+    }
+    .card-front .pup-name {
+      font-size: 0.68em;
+      font-weight: bold;
+      color: #ffe08a;
+      margin-top: 3px;
+      text-align: center;
+      line-height: 1.15;
+    }
+    .grid-easy   { grid-template-columns: repeat(4, 1fr); }
+    .grid-medium { grid-template-columns: repeat(6, 1fr); }
+    .grid-hard   { grid-template-columns: repeat(6, 1fr); }
+    .grid-expert { grid-template-columns: repeat(8, 1fr); }
+  </style>
+</head>
+<body>
+  <div class="game-container">
+    <a href="../../index.html" class="back-btn">← חזור לפורטל</a>
+    <div class="game-title-bar">🃏 משחק זיכרון</div>
+
+    <div class="level-select" id="level-select">
+      <button class="level-btn" onclick="startGame('easy')">
+        <div class="level-icon">⭐</div>
+        <div class="level-name">קל</div>
+        <div class="level-desc">6 זוגות</div>
+      </button>
+      <button class="level-btn" onclick="startGame('medium')">
+        <div class="level-icon">⭐⭐</div>
+        <div class="level-name">בינוני</div>
+        <div class="level-desc">9 זוגות</div>
+      </button>
+      <button class="level-btn" onclick="startGame('hard')">
+        <div class="level-icon">⭐⭐⭐</div>
+        <div class="level-name">קשה</div>
+        <div class="level-desc">12 זוגות</div>
+      </button>
+      <button class="level-btn" onclick="startGame('expert')">
+        <div class="level-icon">⭐⭐⭐⭐</div>
+        <div class="level-name">מומחה</div>
+        <div class="level-desc">16 זוגות</div>
+      </button>
+    </div>
+
+    <div id="game-area" style="display:none;">
+      <div class="score-bar">
+        <div class="score-item">רמה: <strong id="level-label"></strong></div>
+        <div class="score-item">ניסיונות: <strong id="attempts">0</strong></div>
+        <div class="score-item">זוגות: <strong id="matched">0</strong> / <span id="total-pairs">0</span></div>
+      </div>
+      <div class="memory-grid" id="grid"></div>
+      <div class="win-message" id="win-msg">
+        🎉 כל הכבוד! מצאת את כל הזוגות!<br>⭐ קיבלת כוכב!<br><br>
+        <button class="btn btn-primary" onclick="startGame(currentLevel)">שחק שוב</button>
+        <button class="btn btn-secondary" onclick="showLevelSelect()">בחר רמה אחרת</button>
+      </div>
+      <button class="btn btn-primary" onclick="startGame(currentLevel)">התחל מחדש</button>
+      <button class="btn btn-secondary" onclick="showLevelSelect()">בחר רמה אחרת</button>
+    </div>
+  </div>
+  <script>
+    // Maccabi Netanya squad
+    const roster = [
+      { id: 'samu',       img: '../../images/players/22-samu.webp',        name: 'סמואל דה סילבה', num: 22 },
+      { id: 'antman',     img: '../../images/players/1-antma.webp',        name: 'ניב אנטמן',      num: 1 },
+      { id: 'dcohen',     img: '../../images/players/daniel-cohen.webp',   name: 'דניאל כהן',      num: 75 },
+      { id: 'morozov',    img: '../../images/players/2-morozov.webp',      name: 'גרגורי מורוזוב',  num: 2 },
+      { id: 'azugi',      img: '../../images/players/12-azugi.webp',       name: 'אלון עזוגי',      num: 12 },
+      { id: 'konate',     img: '../../images/players/6-konate.webp',       name: 'בקארי קונטה',     num: 6 },
+      { id: 'feldman',    img: '../../images/players/44-feldman.webp',     name: 'בני פלדמן',       num: 44 },
+      { id: 'saba',       img: '../../images/players/40-saba.webp',        name: 'סבא חובדז\'יאני',  num: 40 },
+      { id: 'benshabat',  img: '../../images/players/4-ben-shabat.webp',   name: 'איתי בן שבת',     num: 4 },
+      { id: 'kolikov',    img: '../../images/players/5-kolikov.webp',      name: 'דניס קוליקוב',    num: 5 },
+      { id: 'jabber',     img: '../../images/players/26-jabber.webp',      name: 'כראם ג\'אבר',      num: 26 },
+      { id: 'amitcohen',  img: '../../images/players/24-amit-cohen.webp',  name: 'עמית כהן',        num: 24 },
+      { id: 'nidam',      img: '../../images/players/13-nidam.webp',       name: 'נדב נידם',        num: 13 },
+      { id: 'talpa',      img: '../../images/players/21-talpa.webp',       name: 'אלכס טלפה',       num: 21 },
+      { id: 'zarura',     img: '../../images/players/16-zarura.webp',      name: 'בסאם זרוראע',     num: 16 },
+      { id: 'haziza',     img: '../../images/players/8-haziza.webp',       name: 'דולב חזיזה',      num: 8 },
+      { id: 'ciprian',    img: '../../images/players/25-cifrian.webp',     name: 'ויליאם סיפריאן',  num: 25 },
+      { id: 'aziz',       img: '../../images/players/aziz.webp',           name: 'עזיז אבוטארה',    num: 32 },
+      { id: 'shamir',     img: '../../images/players/18-shamir.webp',      name: 'עמרי שמיר',       num: 18 },
+      { id: 'maor',       img: '../../images/players/15-maor.webp',        name: 'מאור לוי',        num: 15 },
+      { id: 'oz',         img: '../../images/players/10-oz.webp',          name: 'עוז בילו',        num: 10 },
+      { id: 'yarin',      img: '../../images/players/17-yarin.webp',       name: 'ירין אבוחצירא',   num: 17 },
+      { id: 'hugi',       img: '../../images/players/11-hugi.webp',        name: 'דור חוגי',        num: 11 },
+      { id: 'liam',       img: '../../images/players/14-liem.webp',        name: 'ליאם כהן',        num: 23 },
+      { id: 'davo',       img: '../../images/players/83-davo.webp',        name: 'מתאוס דאבו',      num: 83 },
+    ];
+
+    const LEVELS = {
+      easy:   { label: 'קל',     pairs: 6,  gridClass: 'grid-easy' },
+      medium: { label: 'בינוני', pairs: 9,  gridClass: 'grid-medium' },
+      hard:   { label: 'קשה',    pairs: 12, gridClass: 'grid-hard' },
+      expert: { label: 'מומחה',  pairs: 16, gridClass: 'grid-expert' },
+    };
+
+    let flipped = [], matched = 0, attempts = 0, locked = false, currentLevel = 'easy', totalPairs = 6;
+
+    function shuffle(arr) { return [...arr].sort(() => Math.random() - 0.5); }
+
+    function showLevelSelect() {
+      document.getElementById('level-select').style.display = 'grid';
+      document.getElementById('game-area').style.display = 'none';
+    }
+
+    function startGame(level) {
+      currentLevel = level;
+      const cfg = LEVELS[level];
+      totalPairs = cfg.pairs;
+
+      document.getElementById('level-select').style.display = 'none';
+      document.getElementById('game-area').style.display = 'block';
+      document.getElementById('level-label').textContent = cfg.label;
+      document.getElementById('total-pairs').textContent = totalPairs;
+
+      flipped = []; matched = 0; attempts = 0; locked = false;
+      document.getElementById('attempts').textContent = 0;
+      document.getElementById('matched').textContent = 0;
+      document.getElementById('win-msg').classList.remove('show');
+
+      const chosen = shuffle(roster).slice(0, totalPairs);
+      const cards = shuffle([...chosen, ...chosen].map((p, i) => ({ ...p, uid: i })));
+
+      const grid = document.getElementById('grid');
+      grid.className = 'memory-grid ' + cfg.gridClass;
+      grid.innerHTML = '';
+      cards.forEach(card => {
+        const el = document.createElement('div');
+        el.className = 'card';
+        el.dataset.id = card.id;
+        el.innerHTML = `
+          <div class="card-face card-back">⚽</div>
+          <div class="card-face card-front">
+            <img src="${card.img}" alt="${card.name}">
+            <div class="pup-name">${card.name} #${card.num}</div>
+          </div>`;
+        el.addEventListener('click', () => flipCard(el));
+        grid.appendChild(el);
+      });
+    }
+
+    function flipCard(el) {
+      if (locked || el.classList.contains('flipped') || el.classList.contains('matched')) return;
+      el.classList.add('flipped');
+      flipped.push(el);
+      if (flipped.length === 2) {
+        locked = true;
+        attempts++;
+        document.getElementById('attempts').textContent = attempts;
+        setTimeout(checkMatch, 900);
+      }
+    }
+
+    function checkMatch() {
+      const [a, b] = flipped;
+      if (a.dataset.id === b.dataset.id) {
+        a.classList.add('matched'); b.classList.add('matched');
+        matched++;
+        document.getElementById('matched').textContent = matched;
+        if (matched === totalPairs) { document.getElementById('win-msg').classList.add('show'); addStar(); }
+      } else {
+        a.classList.remove('flipped'); b.classList.remove('flipped');
+      }
+      flipped = []; locked = false;
+    }
+
+    function addStar() {
+      localStorage.setItem('maccabi-netanya-stars', parseInt(localStorage.getItem('maccabi-netanya-stars') || '0') + 1);
+    }
+  </script>
+</body>
+</html>
