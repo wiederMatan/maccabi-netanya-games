@@ -577,8 +577,8 @@ namespace MathStrikers.EditorTools
                 font, 24, Chalk * 0.65f, TextAnchor.MiddleCenter, new Vector2(0f, -70f), new Vector2(600f, 30f));
             SetAnchor(tierCaption.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
 
-            string[] tierNames = { "Easy", "Medium", "Hard" };
-            string[] tierHints = { "+  −", "+  −  ×", "×  ÷" };
+            string[] tierNames = { "Starter", "Easy", "Medium", "Hard" };
+            string[] tierHints = { "+  −  to 20", "+  −  to 80", "+  −  ×", "×  ÷" };
             var tierButtons = new Button[tierNames.Length];
             var tierBackgrounds = new Image[tierNames.Length];
             var tierLabels = new Text[tierNames.Length];
@@ -591,20 +591,20 @@ namespace MathStrikers.EditorTools
 
                 var tierRect = tierObject.GetComponent<RectTransform>();
                 SetAnchor(tierRect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
-                tierRect.sizeDelta = new Vector2(230f, 88f);
-                tierRect.anchoredPosition = new Vector2((i - 1) * 250f, -130f);
+                tierRect.sizeDelta = new Vector2(220f, 88f);
+                tierRect.anchoredPosition = new Vector2((i - 1.5f) * 240f, -130f);
 
                 var tierImage = tierObject.GetComponent<Image>();
                 tierImage.color = new Color(0.10f, 0.20f, 0.28f);
                 var tierButton = tierObject.GetComponent<Button>();
                 tierButton.targetGraphic = tierImage;
 
-                var tierLabel = Label(tierObject.transform, "Label", tierNames[i], font, 32,
-                    new Color(0.86f, 0.88f, 0.86f), TextAnchor.MiddleCenter, new Vector2(0f, 14f), new Vector2(230f, 40f));
+                var tierLabel = Label(tierObject.transform, "Label", tierNames[i], font, 30,
+                    new Color(0.86f, 0.88f, 0.86f), TextAnchor.MiddleCenter, new Vector2(0f, 14f), new Vector2(220f, 40f));
                 SetAnchor(tierLabel.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
 
-                var tierHint = Label(tierObject.transform, "Hint", tierHints[i], font, 20,
-                    new Color(0.86f, 0.88f, 0.86f, 0.7f), TextAnchor.MiddleCenter, new Vector2(0f, -18f), new Vector2(230f, 26f));
+                var tierHint = Label(tierObject.transform, "Hint", tierHints[i], font, 19,
+                    new Color(0.86f, 0.88f, 0.86f, 0.7f), TextAnchor.MiddleCenter, new Vector2(0f, -18f), new Vector2(220f, 26f));
                 SetAnchor(tierHint.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
 
                 tierButtons[i] = tierButton;

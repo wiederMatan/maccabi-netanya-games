@@ -40,11 +40,13 @@ namespace MathStrikers.EditorTools
         static int CheckGenerator()
         {
             int failures = 0;
+            int checkedCount = 0;
 
             foreach (Difficulty difficulty in Enum.GetValues(typeof(Difficulty)))
             {
                 for (int i = 0; i < 400; i++)
                 {
+                    checkedCount++;
                     var problem = ProblemGenerator.Create(difficulty);
 
                     if (problem.Options == null || problem.Options.Length != ProblemGenerator.OptionCount)
@@ -88,10 +90,37 @@ namespace MathStrikers.EditorTools
                         failures++;
                         break;
                     }
+
+                    // The starter tier is aimed at 8-9 year olds: nothing above 20,
+                    // and no operation a child would have to carry or borrow through.
+                    if (difficulty == Difficulty.Starter)
+                    {
+                        if (problem.Answer > 20 || problem.Answer < 0)
+                        {
+                            Debug.LogError($"[Verify] Starter: '{problem.Text}' = {problem.Answer} is outside 0-20.");
+                            failures++;
+                            break;
+                        }
+
+                        string[] bits = problem.Text.Split(' ');
+                        if (int.Parse(bits[0]) > 20 || int.Parse(bits[2]) > 20)
+                        {
+                            Debug.LogError($"[Verify] Starter: '{problem.Text}' uses a number above 20.");
+                            failures++;
+                            break;
+                        }
+
+                        if (bits[1] != "+" && bits[1] != "-")
+                        {
+                            Debug.LogError($"[Verify] Starter: '{problem.Text}' uses '{bits[1]}', expected + or -.");
+                            failures++;
+                            break;
+                        }
+                    }
                 }
             }
 
-            if (failures == 0) Debug.Log("[Verify] Problem generator: OK (1200 problems checked).");
+            if (failures == 0) Debug.Log($"[Verify] Problem generator: OK ({checkedCount} problems checked).");
             return failures;
         }
 

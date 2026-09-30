@@ -5,6 +5,8 @@ namespace MathStrikers
 {
     public enum Difficulty
     {
+        /// <summary>Ages 8-9: sums and differences inside 20, never negative.</summary>
+        Starter = 0,
         Rookie = 1,
         Pro = 2,
         Legend = 3
@@ -35,6 +37,25 @@ namespace MathStrikers
 
             switch (difficulty)
             {
+                case Difficulty.Starter:
+                    // Small numbers a child can still count on their fingers if they
+                    // need to, and subtraction never crosses zero.
+                    if (Random.value < 0.5f)
+                    {
+                        a = Random.Range(1, 11);
+                        b = Random.Range(1, Mathf.Min(11, 21 - a));
+                        answer = a + b;
+                        text = $"{a} + {b}";
+                    }
+                    else
+                    {
+                        a = Random.Range(5, 21);
+                        b = Random.Range(1, a);
+                        answer = a - b;
+                        text = $"{a} - {b}";
+                    }
+                    break;
+
                 case Difficulty.Rookie:
                     if (Random.value < 0.5f)
                     {
@@ -105,7 +126,13 @@ namespace MathStrikers
         static MathProblem BuildChoices(string text, int answer, Difficulty difficulty)
         {
             var options = new List<int>(OptionCount) { answer };
-            int spread = difficulty == Difficulty.Legend ? 12 : difficulty == Difficulty.Pro ? 10 : 8;
+            int spread = difficulty switch
+            {
+                Difficulty.Legend => 12,
+                Difficulty.Pro => 10,
+                Difficulty.Rookie => 8,
+                _ => 4  // Starter answers are small, so wrong options must sit close.
+            };
             int guard = 0;
 
             while (options.Count < OptionCount && guard++ < 200)

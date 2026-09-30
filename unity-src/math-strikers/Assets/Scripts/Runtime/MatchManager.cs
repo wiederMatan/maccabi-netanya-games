@@ -31,11 +31,12 @@ namespace MathStrikers
         // Easy / Medium / Hard, in the order the overlay buttons appear.
         static readonly Difficulty[] Tiers =
         {
-            Difficulty.Rookie, Difficulty.Pro, Difficulty.Legend
+            Difficulty.Starter, Difficulty.Rookie, Difficulty.Pro, Difficulty.Legend
         };
 
         static readonly string[] TierBlurbs =
         {
+            "Starter — adding and taking away, up to 20.",
             "Easy — addition and subtraction.",
             "Medium — adds multiplication.",
             "Hard — multiplication and division."
