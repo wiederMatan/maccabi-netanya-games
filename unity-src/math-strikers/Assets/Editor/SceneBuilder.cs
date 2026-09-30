@@ -56,9 +56,12 @@ namespace MathStrikers.EditorTools
             var hud = BuildHud();
             BuildCameraAndLights();
 
+            var audioObject = new GameObject("MatchAudio", typeof(AudioSource), typeof(MatchAudio));
+
             var managerObject = new GameObject("MatchManager");
             var manager = managerObject.AddComponent<MatchManager>();
             manager.Bind(ball, keeper, zones, hud, striker.transform);
+            _ = audioObject;
             EditorUtility.SetDirty(manager);
 
             EditorSceneManager.MarkSceneDirty(scene);
@@ -402,7 +405,7 @@ namespace MathStrikers.EditorTools
         static GameObject BuildStriker()
         {
             var striker = SpawnPlayer("Striker", StrikerController, KitYellow, KitBlack);
-            striker.transform.position = new Vector3(-3.0f, 0f, GoalLineZ - 11.4f);
+            striker.transform.position = new Vector3(-2.0f, 0f, GoalLineZ - 11.4f);
             striker.transform.rotation = Quaternion.LookRotation(
                 new Vector3(0f, 0f, GoalLineZ) - striker.transform.position);
             return striker;
@@ -599,6 +602,10 @@ namespace MathStrikers.EditorTools
             camera.clearFlags = CameraClearFlags.Skybox;
             cameraObject.AddComponent<AudioListener>();
 
+            // Hold the horizontal framing steady across window shapes, so the
+            // striker and the outer answer boards never fall off the sides.
+            cameraObject.AddComponent<CameraFramer>().Configure(camera.fieldOfView, 1.25f);
+
             var sunObject = new GameObject("Sun");
             sunObject.transform.rotation = Quaternion.Euler(52f, -28f, 0f);
             var sun = sunObject.AddComponent<Light>();
@@ -662,47 +669,6 @@ namespace MathStrikers.EditorTools
             var banner = Label(topBar.transform, "Banner", "Career", font, 26, Gold,
                 TextAnchor.MiddleRight, new Vector2(-30f, -55f), new Vector2(700f, 40f));
             SetAnchor(banner.rectTransform, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f));
-
-            // --- goal scorer card ----------------------------------------------
-            var goalCard = Panel(canvasObject.transform, "GoalCard",
-                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(760f, 300f),
-                new Color(0.05f, 0.11f, 0.17f, 0.96f));
-            var goalCardRect = goalCard.GetComponent<RectTransform>();
-            goalCardRect.pivot = new Vector2(0.5f, 0.5f);
-            goalCardRect.sizeDelta = new Vector2(760f, 300f);
-            goalCardRect.anchoredPosition = new Vector2(0f, -40f);
-            var goalCardGroup = goalCard.AddComponent<CanvasGroup>();
-
-            // Club-yellow spine down the side, the way a broadcast graphic is keyed
-            // to the scoring team's colour.
-            var spine = new GameObject("Spine", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-            spine.transform.SetParent(goalCard.transform, false);
-            var spineRect = spine.GetComponent<RectTransform>();
-            spineRect.anchorMin = new Vector2(0f, 0f);
-            spineRect.anchorMax = new Vector2(0f, 1f);
-            spineRect.pivot = new Vector2(0f, 0.5f);
-            spineRect.sizeDelta = new Vector2(14f, 0f);
-            spineRect.anchoredPosition = Vector2.zero;
-            spine.GetComponent<Image>().color = KitYellow;
-
-            var goalPortrait = new GameObject("Portrait",
-                typeof(RectTransform), typeof(CanvasRenderer), typeof(RawImage));
-            goalPortrait.transform.SetParent(goalCard.transform, false);
-            var goalPortraitRect = goalPortrait.GetComponent<RectTransform>();
-            goalPortraitRect.anchorMin = new Vector2(0f, 0.5f);
-            goalPortraitRect.anchorMax = new Vector2(0f, 0.5f);
-            goalPortraitRect.pivot = new Vector2(0f, 0.5f);
-            goalPortraitRect.sizeDelta = new Vector2(260f, 260f);
-            goalPortraitRect.anchoredPosition = new Vector2(34f, 0f);
-            var goalPortraitImage = goalPortrait.GetComponent<RawImage>();
-            goalPortraitImage.raycastTarget = false;
-
-            var goalHeadline = Label(goalCard.transform, "Headline", "GOAL!", font, 74, KitYellow,
-                TextAnchor.UpperLeft, new Vector2(320f, -36f), new Vector2(420f, 86f));
-            var goalNumber = Label(goalCard.transform, "Number", "", font, 40, Chalk,
-                TextAnchor.UpperLeft, new Vector2(320f, -130f), new Vector2(420f, 48f));
-            var goalName = Label(goalCard.transform, "Name", "", font, 34, Chalk * 0.9f,
-                TextAnchor.UpperLeft, new Vector2(320f, -182f), new Vector2(420f, 52f));
 
             // --- striker portrait ----------------------------------------------
             // The real club photo, so the player taking the shots is a recognisable
@@ -855,8 +821,6 @@ namespace MathStrikers.EditorTools
                 timerText, fillImage, overlay, title, body, button, buttonLabel);
             hud.BindDifficulty(tierButtons, tierBackgrounds, tierLabels);
             hud.BindPortrait(portraitImage, strikerName, strikerNumber);
-            hud.BindGoalCard(goalCard, goalCardGroup, goalPortraitImage,
-                goalHeadline, goalName, goalNumber);
             EditorUtility.SetDirty(hud);
 
             // Silence unused-variable warnings for the static captions.

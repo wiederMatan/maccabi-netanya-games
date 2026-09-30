@@ -12,6 +12,8 @@ namespace MathStrikers
     {
         public const float AnswerSeconds = 30f;
         public const int ShotsPerMatch = 5;
+        const float RunUpSeconds = 0.55f;
+        const float ContactDelay = 0.42f;
 
         public static MatchManager Instance { get; private set; }
 
@@ -26,6 +28,7 @@ namespace MathStrikers
         [SerializeField] TargetZone[] zones;
         [SerializeField] HudController hud;
         [SerializeField] Transform striker;
+        [SerializeField] MatchAudio audio_;
         [SerializeField] Difficulty difficulty = Difficulty.Pro;
 
         // Easy / Medium / Hard, in the order the overlay buttons appear.
@@ -64,7 +67,10 @@ namespace MathStrikers
         bool careerStarted;
         SquadMember striker_;
         Animator strikerAnimator;
+        Vector3 strikerHome;
+        Quaternion strikerHomeRotation;
         static readonly int KickTrigger = Animator.StringToHash("Kick");
+        static readonly int RunTrigger = Animator.StringToHash("Run");
 
         string CurrentOpponent => Opponents[matchIndex % Opponents.Length];
 
@@ -80,7 +86,14 @@ namespace MathStrikers
 
         void Start()
         {
-            if (striker != null) strikerAnimator = striker.GetComponentInChildren<Animator>();
+            if (audio_ == null) audio_ = FindFirstObjectByType<MatchAudio>();
+
+            if (striker != null)
+            {
+                strikerAnimator = striker.GetComponentInChildren<Animator>();
+                strikerHome = striker.position;
+                strikerHomeRotation = striker.rotation;
+            }
 
             for (int i = 0; i < zones.Length; i++)
             {
@@ -207,7 +220,7 @@ namespace MathStrikers
 
             ball?.Park();
             keeper?.ResetStance();
-            hud?.HideGoalCard();
+            ResetStriker();
 
             timeLeft = AnswerSeconds;
             awaitingAnswer = true;
@@ -242,9 +255,10 @@ namespace MathStrikers
             int keeperLane = Random.value < 0.35f
                 ? zone.LaneIndex
                 : (zone.LaneIndex + Random.Range(1, zones.Length)) % zones.Length;
-            keeper?.Dive(zones[keeperLane].AimPoint);
 
             bool saved = correct && keeperLane == zone.LaneIndex && Random.value < 0.25f;
+
+            Vector3 target;
 
             if (correct && !saved)
             {
@@ -255,14 +269,13 @@ namespace MathStrikers
                 hud?.SetFeedback(streak >= 3
                     ? $"GOAL! {striker_.Name} again — streak ×{streak}, +{10 + (streak - 1) * 2 + bonus} points"
                     : $"GOAL! {striker_.Name} scores — +{10 + bonus} points");
-                hud?.ShowGoalCard(striker_, streak >= 3 ? $"GOAL!  ×{streak}" : "GOAL!");
-                ball?.Strike(zone.AimPoint);
+                target = zone.AimPoint;
             }
             else if (saved)
             {
                 streak = 0;
                 hud?.SetFeedback($"{CurrentOpponent}'s keeper reads it — saved!");
-                ball?.Strike(zone.AimPoint);
+                target = zone.AimPoint;
             }
             else
             {
@@ -270,15 +283,14 @@ namespace MathStrikers
                 opponentGoals++;
                 hud?.SetFeedback($"Wrong — it was {problem.Answer}. The shot sails over.");
                 // A wrong answer drags the strike high and wide of the frame.
-                Vector3 wide = zone.AimPoint + new Vector3(
+                target = zone.AimPoint + new Vector3(
                     Mathf.Sign(zone.AimPoint.x == 0f ? 1f : zone.AimPoint.x) * 1.4f, 2.4f, 0f);
-                ball?.Strike(wide);
             }
 
             hud?.SetScore(score);
             hud?.SetStreak(streak);
             hud?.SetScoreline(playerGoals, opponentGoals);
-            StartCoroutine(KickAnimation());
+            StartCoroutine(RunUpAndStrike(target, keeperLane, correct && !saved));
         }
 
         void TimeUp()
@@ -298,14 +310,70 @@ namespace MathStrikers
             hud?.SetScoreline(playerGoals, opponentGoals);
             hud?.SetTimer(0f, AnswerSeconds);
             hud?.SetFeedback($"Out of time — it was {problem.Answer}. {CurrentOpponent} break away.");
+            audio_?.PlayMiss();
 
             StartCoroutine(AdvanceAfter(1.6f));
         }
 
-        IEnumerator KickAnimation()
+        /// <summary>
+        /// The striker waits clear of the answer boards while the question is up,
+        /// then runs in and strikes. The ball only leaves the spot once the boot has
+        /// had time to reach it, so the kick and the shot read as one action.
+        /// </summary>
+        IEnumerator RunUpAndStrike(Vector3 target, int keeperLane, bool onTarget)
         {
-            if (strikerAnimator != null) strikerAnimator.SetTrigger(KickTrigger);
-            yield break;
+            if (striker == null)
+            {
+                ball?.Strike(target);
+                keeper?.Dive(zones[keeperLane].AimPoint);
+                yield break;
+            }
+
+            Vector3 spot = ball != null ? ball.transform.position : Vector3.zero;
+            Vector3 plant = spot + new Vector3(-0.42f, 0f, -0.62f);
+            // Face where the shot is going, not just downfield.
+            Vector3 lookAt = new Vector3(target.x, 0f, target.z) - new Vector3(plant.x, 0f, plant.z);
+            Quaternion facing = lookAt.sqrMagnitude > 0.001f
+                ? Quaternion.LookRotation(lookAt)
+                : strikerHomeRotation;
+
+            strikerAnimator?.SetTrigger(RunTrigger);
+
+            float t = 0f;
+            while (t < 1f)
+            {
+                t += Time.deltaTime / RunUpSeconds;
+                float eased = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(t));
+                striker.position = Vector3.Lerp(strikerHome, plant, eased);
+                striker.rotation = Quaternion.Slerp(strikerHomeRotation, facing, eased);
+                yield return null;
+            }
+
+            striker.position = plant;
+            striker.rotation = facing;
+            strikerAnimator?.SetTrigger(KickTrigger);
+
+            // Wait for the swing to reach the ball before it leaves the spot.
+            yield return new WaitForSeconds(ContactDelay);
+
+            audio_?.PlayKick();
+            ball?.Strike(target);
+            keeper?.Dive(zones[keeperLane].AimPoint);
+
+            // Let the ball travel before calling the result, so the cue lands with
+            // the ball rather than with the boot.
+            yield return new WaitForSeconds(0.55f);
+            if (onTarget) audio_?.PlayGoal(); else audio_?.PlayMiss();
+        }
+
+        /// <summary>Put the striker back on his mark for the next question.</summary>
+        void ResetStriker()
+        {
+            // Deliberately not StopAllCoroutines: the shot-advance coroutine is the
+            // one that called this, and killing it would stall the match.
+            if (striker == null) return;
+            striker.position = strikerHome;
+            striker.rotation = strikerHomeRotation;
         }
 
         void OnStrikeResolved()
@@ -335,6 +403,8 @@ namespace MathStrikers
 
             ball?.Park();
             keeper?.ResetStance();
+
+            audio_?.PlayWhistle();
 
             bool won = playerGoals > opponentGoals;
             bool drew = playerGoals == opponentGoals;

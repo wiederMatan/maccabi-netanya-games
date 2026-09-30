@@ -61,12 +61,6 @@ namespace MathStrikers.EditorTools
                     hud.HideOverlay();
                 }
 
-                // -showGoal captures the scorer graphic.
-                if (System.Array.IndexOf(System.Environment.GetCommandLineArgs(), "-showGoal") >= 0)
-                {
-                    hud.ShowGoalCard(Roster.Squad[6], "GOAL!");
-                    hud.RevealGoalCardInstantly();
-                }
             }
 
             var zones = Object.FindObjectsByType<TargetZone>(FindObjectsSortMode.None);

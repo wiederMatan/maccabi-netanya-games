@@ -16,32 +16,18 @@
       direction: rtl;
     }
 
+    /* The match fills the viewport edge to edge; the only chrome is a small
+       floating back button laid over the top corner. */
     #shell {
-      height: 100%;
-      display: flex;
-      flex-direction: column;
-    }
-
-    header {
-      flex: 0 0 auto;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      padding: 10px 16px;
-      background: rgba(0, 0, 0, 0.28);
-      border-bottom: 2px solid rgba(255, 204, 0, 0.45);
-    }
-
-    header h1 {
-      font-size: 1.15rem;
-      color: #ffcc00;
-      text-shadow: 2px 2px 0 #b38f00;
-      white-space: nowrap;
+      position: fixed;
+      inset: 0;
     }
 
     .back {
-      flex: 0 0 auto;
+      position: fixed;
+      top: max(10px, env(safe-area-inset-top));
+      right: max(10px, env(safe-area-inset-right));
+      z-index: 10;
       display: inline-block;
       padding: 7px 16px;
       border-radius: 20px;
@@ -55,24 +41,16 @@
     }
     .back:hover { background: rgba(255, 204, 0, 0.22); }
 
-    /* The stage keeps the match at 16:9 and as large as the window allows,
-       so the game fills a phone screen and a desktop window equally well. */
     #stage {
-      flex: 1 1 auto;
-      position: relative;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 0;
-      padding: 8px;
+      position: absolute;
+      inset: 0;
     }
 
     #frame {
-      position: relative;
+      position: absolute;
+      inset: 0;
       background: #000;
-      border-radius: 10px;
       overflow: hidden;
-      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.55);
     }
 
     #unity-canvas {
@@ -130,10 +108,7 @@
 </head>
 <body>
   <div id="shell">
-    <header>
-      <h1>⚽ בועטים וחושבים</h1>
-      <a class="back" href="../../index.html">← חזרה למשחקים</a>
-    </header>
+    <a class="back" href="../../index.html">← חזרה למשחקים</a>
 
     <div id="stage">
       <div id="frame">
@@ -162,18 +137,15 @@
     var errorBox = document.querySelector("#error");
     var errorText = document.querySelector("#error-text");
 
-    var ASPECT = 1920 / 1080;
-
-    // Fit the largest 16:9 box that still fits the stage, so the match scales
-    // from a phone in portrait up to a full desktop window without cropping.
+    // Match the drawing buffer to the viewport (capped by device pixel ratio so a
+    // phone is not asked to render four times the pixels it can show), and let the
+    // game camera widen instead of letterboxing.
     function fit() {
-      var available = stage.getBoundingClientRect();
-      var width = Math.max(0, available.width - 16);
-      var height = Math.max(0, available.height - 16);
-      if (width / height > ASPECT) width = height * ASPECT;
-      else height = width / ASPECT;
-      frame.style.width = Math.floor(width) + "px";
-      frame.style.height = Math.floor(height) + "px";
+      var ratio = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.floor(window.innerWidth * ratio);
+      canvas.height = Math.floor(window.innerHeight * ratio);
+      canvas.style.width = window.innerWidth + "px";
+      canvas.style.height = window.innerHeight + "px";
     }
 
     window.addEventListener("resize", fit);
