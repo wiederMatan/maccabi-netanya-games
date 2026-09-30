@@ -203,6 +203,7 @@ namespace MathStrikers
 
             ball?.Park();
             keeper?.ResetStance();
+            hud?.HideGoalCard();
 
             timeLeft = AnswerSeconds;
             awaitingAnswer = true;
@@ -250,6 +251,7 @@ namespace MathStrikers
                 hud?.SetFeedback(streak >= 3
                     ? $"GOAL! {striker_.Name} again — streak ×{streak}, +{10 + (streak - 1) * 2 + bonus} points"
                     : $"GOAL! {striker_.Name} scores — +{10 + bonus} points");
+                hud?.ShowGoalCard(striker_, streak >= 3 ? $"GOAL!  ×{streak}" : "GOAL!");
                 ball?.Strike(zone.AimPoint);
             }
             else if (saved)

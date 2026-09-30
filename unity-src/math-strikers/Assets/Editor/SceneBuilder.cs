@@ -104,6 +104,7 @@ namespace MathStrikers.EditorTools
             BuildGoal();
             BuildPitchMarkings();
             BuildAdBoards();
+            BuildStandees();
             BuildStands();
         }
 
@@ -247,6 +248,80 @@ namespace MathStrikers.EditorTools
                 text.color = yellow ? KitBlack : new Color(0.75f, 0.63f, 0.12f);
                 caption.GetComponent<MeshRenderer>().sharedMaterial = font.material;
             }
+        }
+
+        /// <summary>
+        /// Squad standees flanking the pitch - the club portraits as printed cutouts,
+        /// which is the honest way to use a front-facing bust photo in a 3D scene.
+        /// Placed wide of the shooting lanes so they never mask the goal.
+        /// </summary>
+        static void BuildStandees()
+        {
+            var root = new GameObject("Standees");
+
+            // Spread across the squad so the same face is not repeated side by side.
+            (string asset, float x, float z)[] placements =
+            {
+                ("10-oz",      -6.4f, 3.2f),
+                ("22-samu",     6.4f, 3.2f),
+                ("8-haziza",   -7.8f, 8.0f),
+                ("25-cifrian",  7.8f, 8.0f)
+            };
+
+            const float width = 1.25f;
+            const float height = 1.25f;
+
+            foreach (var (asset, x, z) in placements)
+            {
+                string texturePath = $"Assets/Resources/Players/{asset}.png";
+                var texture = AssetDatabase.LoadAssetAtPath<Texture2D>(texturePath);
+                if (texture == null)
+                {
+                    Debug.LogWarning($"[Math Strikers] Standee portrait missing: {texturePath}");
+                    continue;
+                }
+
+                var standee = new GameObject($"Standee_{asset}");
+                standee.transform.SetParent(root.transform);
+                standee.transform.position = new Vector3(x, height / 2f + 0.34f, z);
+
+                var board = GameObject.CreatePrimitive(PrimitiveType.Quad);
+                board.name = "Cutout";
+                board.transform.SetParent(standee.transform, false);
+                board.transform.localScale = new Vector3(width, height, 1f);
+                Object.DestroyImmediate(board.GetComponent<Collider>());
+
+                var material = GetMaterial($"Standee_{asset}", Color.white, 0f, 0.1f);
+                material.mainTexture = texture;
+                ConfigureCutout(material);
+                board.GetComponent<Renderer>().sharedMaterial = material;
+
+                // A simple plinth so the cutout reads as a standee rather than a
+                // portrait floating above the grass.
+                var plinth = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                plinth.name = "Plinth";
+                plinth.transform.SetParent(standee.transform, false);
+                plinth.transform.localPosition = new Vector3(0f, -height / 2f - 0.16f, 0f);
+                plinth.transform.localScale = new Vector3(width * 0.8f, 0.32f, 0.12f);
+                Object.DestroyImmediate(plinth.GetComponent<Collider>());
+                plinth.GetComponent<Renderer>().sharedMaterial =
+                    GetMaterial("BoardYellow", KitYellow, 0f, 0.25f);
+            }
+        }
+
+        /// <summary>Alpha-tested Standard material, for cutouts with a hard edge.</summary>
+        static void ConfigureCutout(Material material)
+        {
+            material.SetFloat("_Mode", 1f);
+            material.SetOverrideTag("RenderType", "TransparentCutout");
+            material.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.One);
+            material.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.Zero);
+            material.SetInt("_ZWrite", 1);
+            material.SetFloat("_Cutoff", 0.5f);
+            material.EnableKeyword("_ALPHATEST_ON");
+            material.DisableKeyword("_ALPHABLEND_ON");
+            material.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+            material.renderQueue = (int)UnityEngine.Rendering.RenderQueue.AlphaTest;
         }
 
         static void BuildStands()
@@ -561,6 +636,47 @@ namespace MathStrikers.EditorTools
                 TextAnchor.MiddleRight, new Vector2(-30f, -55f), new Vector2(700f, 40f));
             SetAnchor(banner.rectTransform, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f));
 
+            // --- goal scorer card ----------------------------------------------
+            var goalCard = Panel(canvasObject.transform, "GoalCard",
+                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(760f, 300f),
+                new Color(0.05f, 0.11f, 0.17f, 0.96f));
+            var goalCardRect = goalCard.GetComponent<RectTransform>();
+            goalCardRect.pivot = new Vector2(0.5f, 0.5f);
+            goalCardRect.sizeDelta = new Vector2(760f, 300f);
+            goalCardRect.anchoredPosition = new Vector2(0f, -40f);
+            var goalCardGroup = goalCard.AddComponent<CanvasGroup>();
+
+            // Club-yellow spine down the side, the way a broadcast graphic is keyed
+            // to the scoring team's colour.
+            var spine = new GameObject("Spine", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            spine.transform.SetParent(goalCard.transform, false);
+            var spineRect = spine.GetComponent<RectTransform>();
+            spineRect.anchorMin = new Vector2(0f, 0f);
+            spineRect.anchorMax = new Vector2(0f, 1f);
+            spineRect.pivot = new Vector2(0f, 0.5f);
+            spineRect.sizeDelta = new Vector2(14f, 0f);
+            spineRect.anchoredPosition = Vector2.zero;
+            spine.GetComponent<Image>().color = KitYellow;
+
+            var goalPortrait = new GameObject("Portrait",
+                typeof(RectTransform), typeof(CanvasRenderer), typeof(RawImage));
+            goalPortrait.transform.SetParent(goalCard.transform, false);
+            var goalPortraitRect = goalPortrait.GetComponent<RectTransform>();
+            goalPortraitRect.anchorMin = new Vector2(0f, 0.5f);
+            goalPortraitRect.anchorMax = new Vector2(0f, 0.5f);
+            goalPortraitRect.pivot = new Vector2(0f, 0.5f);
+            goalPortraitRect.sizeDelta = new Vector2(260f, 260f);
+            goalPortraitRect.anchoredPosition = new Vector2(34f, 0f);
+            var goalPortraitImage = goalPortrait.GetComponent<RawImage>();
+            goalPortraitImage.raycastTarget = false;
+
+            var goalHeadline = Label(goalCard.transform, "Headline", "GOAL!", font, 74, KitYellow,
+                TextAnchor.UpperLeft, new Vector2(320f, -36f), new Vector2(420f, 86f));
+            var goalNumber = Label(goalCard.transform, "Number", "", font, 40, Chalk,
+                TextAnchor.UpperLeft, new Vector2(320f, -130f), new Vector2(420f, 48f));
+            var goalName = Label(goalCard.transform, "Name", "", font, 34, Chalk * 0.9f,
+                TextAnchor.UpperLeft, new Vector2(320f, -182f), new Vector2(420f, 52f));
+
             // --- striker portrait ----------------------------------------------
             // The real club photo, so the player taking the shots is a recognisable
             // Maccabi Netanya squad member rather than an anonymous figure.
@@ -712,6 +828,8 @@ namespace MathStrikers.EditorTools
                 timerText, fillImage, overlay, title, body, button, buttonLabel);
             hud.BindDifficulty(tierButtons, tierBackgrounds, tierLabels);
             hud.BindPortrait(portraitImage, strikerName, strikerNumber);
+            hud.BindGoalCard(goalCard, goalCardGroup, goalPortraitImage,
+                goalHeadline, goalName, goalNumber);
             EditorUtility.SetDirty(hud);
 
             // Silence unused-variable warnings for the static captions.

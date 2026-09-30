@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -22,6 +23,12 @@ namespace MathStrikers
         [SerializeField] Text startBody;
         [SerializeField] Button startButton;
         [SerializeField] Text startButtonLabel;
+        [SerializeField] GameObject goalCard;
+        [SerializeField] CanvasGroup goalCardGroup;
+        [SerializeField] RawImage goalCardImage;
+        [SerializeField] Text goalCardHeadline;
+        [SerializeField] Text goalCardName;
+        [SerializeField] Text goalCardNumber;
         [SerializeField] RawImage portraitImage;
         [SerializeField] Text portraitName;
         [SerializeField] Text portraitNumber;
@@ -57,6 +64,79 @@ namespace MathStrikers
             startBody = body;
             startButton = button;
             startButtonLabel = buttonLabel;
+        }
+
+        public void BindGoalCard(GameObject root, CanvasGroup group, RawImage image,
+            Text headline, Text name, Text number)
+        {
+            goalCard = root;
+            goalCardGroup = group;
+            goalCardImage = image;
+            goalCardHeadline = headline;
+            goalCardName = name;
+            goalCardNumber = number;
+            if (goalCard != null) goalCard.SetActive(false);
+        }
+
+        /// <summary>
+        /// The broadcast scorer graphic. A front-facing club portrait is wasted on a
+        /// figure seen from behind, so this is where the real photo actually lands.
+        /// </summary>
+        public void ShowGoalCard(SquadMember member, string headline)
+        {
+            if (goalCard == null) return;
+
+            Set(goalCardHeadline, headline);
+            Set(goalCardName, member.Name);
+            Set(goalCardNumber, member.Shirt);
+
+            if (goalCardImage != null)
+            {
+                var portrait = Roster.LoadPortrait(member);
+                goalCardImage.texture = portrait;
+                goalCardImage.enabled = portrait != null;
+            }
+
+            goalCard.SetActive(true);
+            StopAllCoroutines();
+            StartCoroutine(RevealGoalCard());
+        }
+
+        /// <summary>
+        /// Jump straight to the revealed state. Edit-mode tooling cannot run the
+        /// coroutine past its first yield, which would otherwise leave the card
+        /// stuck at zero alpha in a headless capture.
+        /// </summary>
+        public void RevealGoalCardInstantly()
+        {
+            StopAllCoroutines();
+            if (goalCardGroup != null) goalCardGroup.alpha = 1f;
+            if (goalCard != null) goalCard.GetComponent<RectTransform>().localScale = Vector3.one;
+        }
+
+        public void HideGoalCard()
+        {
+            StopAllCoroutines();
+            if (goalCard != null) goalCard.SetActive(false);
+        }
+
+        IEnumerator RevealGoalCard()
+        {
+            var card = goalCard.GetComponent<RectTransform>();
+            float t = 0f;
+
+            while (t < 1f)
+            {
+                t += Time.deltaTime * 4.5f;
+                float eased = 1f - Mathf.Pow(1f - Mathf.Clamp01(t), 3f);
+                if (goalCardGroup != null) goalCardGroup.alpha = eased;
+                if (card != null)
+                    card.localScale = Vector3.one * Mathf.Lerp(0.88f, 1f, eased);
+                yield return null;
+            }
+
+            if (goalCardGroup != null) goalCardGroup.alpha = 1f;
+            if (card != null) card.localScale = Vector3.one;
         }
 
         public void BindPortrait(RawImage image, Text name, Text number)
