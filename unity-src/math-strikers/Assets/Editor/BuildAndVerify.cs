@@ -208,7 +208,13 @@ namespace MathStrikers.EditorTools
 
             PlayerSettings.WebGL.compressionFormat = WebGLCompressionFormat.Disabled;
             PlayerSettings.WebGL.dataCaching = true;
-            PlayerSettings.WebGL.template = "APPLICATION:Default";
+            PlayerSettings.WebGL.template = "PROJECT:MaccabiNetanya";
+
+            // The HUD is authored against a 1920x1080 reference and the camera is
+            // framed for 16:9, so the canvas has to share that aspect or the match
+            // gets letterboxed against its own layout.
+            PlayerSettings.defaultWebScreenWidth = 1920;
+            PlayerSettings.defaultWebScreenHeight = 1080;
             PlayerSettings.productName = "Math Strikers";
             PlayerSettings.companyName = "Maccabi Netanya Games";
             PlayerSettings.runInBackground = true;

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Math Strikers — מכבי נתניה</title>
+  <title>{{{ PRODUCT_NAME }}} — מכבי נתניה</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -137,7 +137,7 @@
 
     <div id="stage">
       <div id="frame">
-        <canvas id="unity-canvas" width="1920" height="1080" tabindex="-1"></canvas>
+        <canvas id="unity-canvas" width="{{{ WIDTH }}}" height="{{{ HEIGHT }}}" tabindex="-1"></canvas>
 
         <div id="loading">
           <h2>טוען את המשחק…</h2>
@@ -162,7 +162,7 @@
     var errorBox = document.querySelector("#error");
     var errorText = document.querySelector("#error-text");
 
-    var ASPECT = 1920 / 1080;
+    var ASPECT = {{{ WIDTH }}} / {{{ HEIGHT }}};
 
     // Fit the largest 16:9 box that still fits the stage, so the match scales
     // from a phone in portrait up to a full desktop window without cropping.
@@ -187,20 +187,20 @@
     }
 
     var config = {
-      dataUrl: "Build/math-strikers.data",
-      frameworkUrl: "Build/math-strikers.framework.js",
-      codeUrl: "Build/math-strikers.wasm",
+      dataUrl: "Build/{{{ DATA_FILENAME }}}",
+      frameworkUrl: "Build/{{{ FRAMEWORK_FILENAME }}}",
+      codeUrl: "Build/{{{ CODE_FILENAME }}}",
       streamingAssetsUrl: "StreamingAssets",
-      companyName: "Maccabi Netanya Games",
-      productName: "Math Strikers",
-      productVersion: "1.0",
+      companyName: {{{ JSON.stringify(COMPANY_NAME) }}},
+      productName: {{{ JSON.stringify(PRODUCT_NAME) }}},
+      productVersion: {{{ JSON.stringify(PRODUCT_VERSION) }}},
       showBanner: function (message, type) {
         if (type === "error") showError(message);
       }
     };
 
     var script = document.createElement("script");
-    script.src = "Build/math-strikers.loader.js";
+    script.src = "Build/{{{ LOADER_FILENAME }}}";
     script.onload = function () {
       createUnityInstance(canvas, config, function (progress) {
         barFill.style.width = Math.round(progress * 100) + "%";
