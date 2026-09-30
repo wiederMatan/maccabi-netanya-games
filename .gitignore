@@ -1,2 +1,18 @@
 .vercel
 .env*
+
+# Unity (source project under unity-src/)
+unity-src/*/Library/
+unity-src/*/Temp/
+unity-src/*/Obj/
+unity-src/*/obj/
+unity-src/*/Build/
+unity-src/*/Builds/
+unity-src/*/Logs/
+unity-src/*/UserSettings/
+unity-src/*/MemoryCaptures/
+unity-src/*/Recordings/
+*.csproj
+*.sln
+*.user
+.DS_Store
