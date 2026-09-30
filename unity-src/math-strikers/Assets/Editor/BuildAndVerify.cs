@@ -24,6 +24,7 @@ namespace MathStrikers.EditorTools
             int failures = 0;
 
             failures += CheckGenerator();
+            failures += CheckRoster();
             failures += CheckSceneWiring();
 
             if (failures > 0)
@@ -121,6 +122,39 @@ namespace MathStrikers.EditorTools
             }
 
             if (failures == 0) Debug.Log($"[Verify] Problem generator: OK ({checkedCount} problems checked).");
+            return failures;
+        }
+
+        /// <summary>The keeper stays in goal - he must never be drawn as the striker.</summary>
+        static int CheckRoster()
+        {
+            int failures = 0;
+
+            failures += Require(Roster.Squad.Length > 0, "Roster is empty.");
+            failures += Require(Roster.Strikers.Length > 0, "No outfield players to pick from.");
+            failures += Require(Roster.Strikers.Length < Roster.Squad.Length,
+                "No goalkeeper is flagged, so the keeper can still be drawn as striker.");
+            failures += Require(Roster.Strikers.All(m => !m.IsGoalkeeper),
+                "A goalkeeper is in the striker pool.");
+
+            for (int i = 0; i < 500; i++)
+            {
+                if (!Roster.Random().IsGoalkeeper) continue;
+                Debug.LogError("[Verify] Roster.Random returned a goalkeeper.");
+                failures++;
+                break;
+            }
+
+            foreach (var member in Roster.Squad)
+            {
+                if (Roster.LoadPortrait(member) != null) continue;
+                Debug.LogError($"[Verify] Portrait missing for {member.Name} ({member.ResourcePath}).");
+                failures++;
+            }
+
+            if (failures == 0)
+                Debug.Log($"[Verify] Roster: OK ({Roster.Strikers.Length} strikers, " +
+                          $"{Roster.Squad.Length - Roster.Strikers.Length} keeper(s) held back).");
             return failures;
         }
 

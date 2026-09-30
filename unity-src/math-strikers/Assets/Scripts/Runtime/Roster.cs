@@ -9,11 +9,15 @@ namespace MathStrikers
         public readonly string Name;
         public readonly string ResourcePath;
 
-        public SquadMember(int number, string name, string resourcePath)
+        /// <summary>Keepers stay in goal; they are never picked to take the shots.</summary>
+        public readonly bool IsGoalkeeper;
+
+        public SquadMember(int number, string name, string resourcePath, bool isGoalkeeper = false)
         {
             Number = number;
             Name = name;
             ResourcePath = resourcePath;
+            IsGoalkeeper = isGoalkeeper;
         }
 
         /// <summary>Shirt number as shown on the portrait, blank for unnumbered squad photos.</summary>
@@ -29,7 +33,7 @@ namespace MathStrikers
     {
         public static readonly SquadMember[] Squad =
         {
-            new SquadMember(1, "Antma", "Players/1-antma"),
+            new SquadMember(1, "Antma", "Players/1-antma", isGoalkeeper: true),
             new SquadMember(2, "Morozov", "Players/2-morozov"),
             new SquadMember(4, "Ben Shabat", "Players/4-ben-shabat"),
             new SquadMember(5, "Kolikov", "Players/5-kolikov"),
@@ -56,7 +60,11 @@ namespace MathStrikers
             new SquadMember(0, "Daniel Cohen", "Players/daniel-cohen"),
         };
 
-        public static SquadMember Random() => Squad[UnityEngine.Random.Range(0, Squad.Length)];
+        /// <summary>The outfield squad - everyone who could plausibly take a penalty.</summary>
+        public static readonly SquadMember[] Strikers =
+            System.Array.FindAll(Squad, member => !member.IsGoalkeeper);
+
+        public static SquadMember Random() => Strikers[UnityEngine.Random.Range(0, Strikers.Length)];
 
         public static Texture2D LoadPortrait(SquadMember member) =>
             Resources.Load<Texture2D>(member.ResourcePath);
