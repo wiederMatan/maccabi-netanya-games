@@ -62,6 +62,7 @@ namespace MathStrikers
         int playerGoals;
         int opponentGoals;
         bool careerStarted;
+        SquadMember striker_;
 
         string CurrentOpponent => Opponents[matchIndex % Opponents.Length];
 
@@ -99,6 +100,7 @@ namespace MathStrikers
                     }
                 }
                 hud.HighlightDifficulty(System.Array.IndexOf(Tiers, difficulty));
+                PickStriker();
                 hud.SetScore(0);
                 hud.SetStreak(0);
                 hud.SetScoreline(0, 0);
@@ -168,8 +170,16 @@ namespace MathStrikers
             StartMatch();
         }
 
+        /// <summary>A different squad member takes the shots each match.</summary>
+        void PickStriker()
+        {
+            striker_ = Roster.Random();
+            hud?.SetStriker(striker_);
+        }
+
         void StartMatch()
         {
+            PickStriker();
             shotIndex = 0;
             playerGoals = 0;
             opponentGoals = 0;
@@ -238,8 +248,8 @@ namespace MathStrikers
                 streak++;
                 playerGoals++;
                 hud?.SetFeedback(streak >= 3
-                    ? $"GOAL! Streak ×{streak} — +{10 + (streak - 1) * 2 + bonus} points"
-                    : $"GOAL! +{10 + bonus} points");
+                    ? $"GOAL! {striker_.Name} again — streak ×{streak}, +{10 + (streak - 1) * 2 + bonus} points"
+                    : $"GOAL! {striker_.Name} scores — +{10 + bonus} points");
                 ball?.Strike(zone.AimPoint);
             }
             else if (saved)

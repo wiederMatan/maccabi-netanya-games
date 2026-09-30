@@ -22,6 +22,9 @@ namespace MathStrikers
         [SerializeField] Text startBody;
         [SerializeField] Button startButton;
         [SerializeField] Text startButtonLabel;
+        [SerializeField] RawImage portraitImage;
+        [SerializeField] Text portraitName;
+        [SerializeField] Text portraitNumber;
         [SerializeField] Button[] difficultyButtons;
         [SerializeField] Image[] difficultyBackgrounds;
         [SerializeField] Text[] difficultyLabels;
@@ -54,6 +57,26 @@ namespace MathStrikers
             startBody = body;
             startButton = button;
             startButtonLabel = buttonLabel;
+        }
+
+        public void BindPortrait(RawImage image, Text name, Text number)
+        {
+            portraitImage = image;
+            portraitName = name;
+            portraitNumber = number;
+        }
+
+        /// <summary>Show which Maccabi Netanya player is taking the shots.</summary>
+        public void SetStriker(SquadMember member)
+        {
+            Set(portraitName, member.Name);
+            Set(portraitNumber, member.Shirt);
+
+            if (portraitImage == null) return;
+
+            var portrait = Roster.LoadPortrait(member);
+            portraitImage.texture = portrait;
+            portraitImage.enabled = portrait != null;
         }
 
         public void BindDifficulty(Button[] buttons, Image[] backgrounds, Text[] labels)

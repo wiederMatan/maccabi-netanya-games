@@ -31,8 +31,11 @@ namespace MathStrikers.EditorTools
         static readonly Color PitchGreen = new Color(0.09f, 0.28f, 0.13f);
         static readonly Color PitchStripe = new Color(0.12f, 0.34f, 0.17f);
         static readonly Color Chalk = new Color(0.95f, 0.95f, 0.92f);
-        static readonly Color KitRed = new Color(0.78f, 0.22f, 0.19f);
-        static readonly Color KitNavy = new Color(0.13f, 0.24f, 0.38f);
+        // Maccabi Netanya play in yellow and black; the keeper opposite them wears a
+        // contrasting kit so the two are never confused mid-shot.
+        static readonly Color KitYellow = new Color(0.98f, 0.82f, 0.09f);
+        static readonly Color KitBlack = new Color(0.09f, 0.09f, 0.10f);
+        static readonly Color KeeperTeal = new Color(0.10f, 0.42f, 0.40f);
         static readonly Color Skin = new Color(0.85f, 0.70f, 0.55f);
         static readonly Color Gold = new Color(0.91f, 0.71f, 0.30f);
         static readonly Color PanelBlue = new Color(0.07f, 0.17f, 0.27f, 0.92f);
@@ -76,7 +79,11 @@ namespace MathStrikers.EditorTools
             pitch.name = "Pitch";
             pitch.transform.localScale = new Vector3(6f, 1f, 6f);
             pitch.transform.position = Vector3.zero;
-            Paint(pitch, "PitchGreen", PitchGreen, 0f, 0.06f);
+            var pitchMaterial = GetMaterial("PitchGreen", PitchGreen, 0f, 0.06f);
+            pitchMaterial.mainTexture = GrassTexture();
+            pitchMaterial.mainTextureScale = new Vector2(26f, 26f);
+            pitchMaterial.color = Color.white;
+            pitch.GetComponent<Renderer>().sharedMaterial = pitchMaterial;
 
             // Mown stripes - subtle, but they sell the scale of the pitch.
             for (int i = -6; i <= 8; i++)
@@ -87,11 +94,16 @@ namespace MathStrikers.EditorTools
                 stripe.transform.localScale = new Vector3(60f, 0.02f, 2.6f);
                 stripe.transform.position = new Vector3(0f, 0.01f, i * 2.6f);
                 Object.DestroyImmediate(stripe.GetComponent<Collider>());
-                Paint(stripe, "PitchStripe", PitchStripe, 0f, 0.08f);
+                var stripeMaterial = GetMaterial("PitchStripe", PitchStripe, 0f, 0.08f);
+                stripeMaterial.mainTexture = GrassTexture();
+                stripeMaterial.mainTextureScale = new Vector2(20f, 1.2f);
+                stripeMaterial.color = new Color(0.78f, 0.86f, 0.78f);
+                stripe.GetComponent<Renderer>().sharedMaterial = stripeMaterial;
             }
 
             BuildGoal();
             BuildPitchMarkings();
+            BuildAdBoards();
             BuildStands();
         }
 
@@ -189,14 +201,62 @@ namespace MathStrikers.EditorTools
             line.GetComponent<Renderer>().sharedMaterial = material;
         }
 
+        /// <summary>
+        /// Pitchside hoardings in club colours, with the club name repeated along
+        /// them. At this distance the boards read as branding rather than text, which
+        /// is exactly how they read on a real broadcast.
+        /// </summary>
+        static void BuildAdBoards()
+        {
+            var boards = new GameObject("AdBoards");
+            var font = BuiltinFont();
+
+            var yellowBoard = GetMaterial("BoardYellow", KitYellow, 0f, 0.25f);
+            var blackBoard = GetMaterial("BoardBlack", KitBlack, 0f, 0.25f);
+
+            const float boardHeight = 0.58f;
+            const float segmentWidth = 5.2f;
+
+            for (int i = -4; i <= 4; i++)
+            {
+                bool yellow = (i & 1) == 0;
+
+                var segment = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                segment.name = $"Board_{i}";
+                segment.transform.SetParent(boards.transform);
+                segment.transform.position = new Vector3(i * segmentWidth, boardHeight / 2f, GoalLineZ + 4.6f);
+                segment.transform.localScale = new Vector3(segmentWidth - 0.12f, boardHeight, 0.16f);
+                Object.DestroyImmediate(segment.GetComponent<Collider>());
+                segment.GetComponent<Renderer>().sharedMaterial = yellow ? yellowBoard : blackBoard;
+
+                var caption = new GameObject("Caption");
+                caption.transform.SetParent(segment.transform, false);
+                // Undo the parent's non-uniform scale so the text is not stretched.
+                caption.transform.localScale = new Vector3(
+                    0.032f / segment.transform.localScale.x,
+                    0.032f / segment.transform.localScale.y,
+                    0.032f / segment.transform.localScale.z);
+                caption.transform.localPosition = new Vector3(0f, 0f, -0.55f);
+
+                var text = caption.AddComponent<TextMesh>();
+                text.text = "MACCABI NETANYA";
+                text.font = font;
+                text.fontSize = 72;
+                text.anchor = TextAnchor.MiddleCenter;
+                text.alignment = TextAlignment.Center;
+                text.color = yellow ? KitBlack : new Color(0.75f, 0.63f, 0.12f);
+                caption.GetComponent<MeshRenderer>().sharedMaterial = font.material;
+            }
+        }
+
         static void BuildStands()
         {
             var stands = new GameObject("Stands");
             var concrete = GetMaterial("Concrete", new Color(0.18f, 0.20f, 0.24f), 0f, 0.12f);
             var crowdColors = new[]
             {
-                new Color(0.55f, 0.45f, 0.26f), new Color(0.58f, 0.58f, 0.57f),
-                new Color(0.48f, 0.22f, 0.20f), new Color(0.30f, 0.44f, 0.48f)
+                new Color(0.72f, 0.60f, 0.12f), new Color(0.16f, 0.16f, 0.17f),
+                new Color(0.62f, 0.52f, 0.14f), new Color(0.48f, 0.48f, 0.47f)
             };
 
             var back = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -237,7 +297,9 @@ namespace MathStrikers.EditorTools
             ball.name = "Ball";
             ball.transform.position = new Vector3(0f, 0.11f, GoalLineZ - 11f);
             ball.transform.localScale = Vector3.one * 0.22f;
-            Paint(ball, "BallWhite", new Color(0.97f, 0.97f, 0.95f), 0f, 0.30f);
+            var ballMaterial = GetMaterial("BallWhite", Color.white, 0f, 0.30f);
+            ballMaterial.mainTexture = BallTexture();
+            ball.GetComponent<Renderer>().sharedMaterial = ballMaterial;
 
             var body = ball.AddComponent<Rigidbody>();
             body.mass = 0.43f;
@@ -254,7 +316,7 @@ namespace MathStrikers.EditorTools
             var keeper = new GameObject("Goalkeeper");
             keeper.transform.position = new Vector3(0f, 0f, GoalLineZ - 0.35f);
 
-            var shirt = GetMaterial("KeeperKit", KitNavy, 0f, 0.22f);
+            var shirt = GetMaterial("KeeperKit", KeeperTeal, 0f, 0.22f);
             var skin = GetMaterial("Skin", Skin, 0f, 0.25f);
             var glove = GetMaterial("Glove", Gold, 0f, 0.3f);
 
@@ -287,7 +349,7 @@ namespace MathStrikers.EditorTools
             striker.transform.rotation = Quaternion.LookRotation(
                 new Vector3(0f, 0f, GoalLineZ) - new Vector3(-3.0f, 0f, GoalLineZ - 11.4f));
 
-            var shirt = GetMaterial("StrikerKit", KitRed, 0f, 0.22f);
+            var shirt = GetMaterial("StrikerKit", KitYellow, 0f, 0.22f);
             var skin = GetMaterial("Skin", Skin, 0f, 0.25f);
             var shorts = GetMaterial("StrikerShorts", new Color(0.12f, 0.12f, 0.14f), 0f, 0.18f);
 
@@ -499,6 +561,39 @@ namespace MathStrikers.EditorTools
                 TextAnchor.MiddleRight, new Vector2(-30f, -55f), new Vector2(700f, 40f));
             SetAnchor(banner.rectTransform, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f));
 
+            // --- striker portrait ----------------------------------------------
+            // The real club photo, so the player taking the shots is a recognisable
+            // Maccabi Netanya squad member rather than an anonymous figure.
+            var portraitCard = Panel(canvasObject.transform, "StrikerCard",
+                new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(300f, 150f),
+                new Color(0.05f, 0.11f, 0.17f, 0.85f));
+            var portraitRect = portraitCard.GetComponent<RectTransform>();
+            portraitRect.pivot = new Vector2(0f, 0f);
+            portraitRect.anchorMin = new Vector2(0f, 0f);
+            portraitRect.anchorMax = new Vector2(0f, 0f);
+            portraitRect.sizeDelta = new Vector2(300f, 150f);
+            portraitRect.anchoredPosition = new Vector2(40f, 40f);
+
+            var portraitObject = new GameObject("Portrait",
+                typeof(RectTransform), typeof(CanvasRenderer), typeof(RawImage));
+            portraitObject.transform.SetParent(portraitCard.transform, false);
+            var portraitImageRect = portraitObject.GetComponent<RectTransform>();
+            portraitImageRect.anchorMin = new Vector2(0f, 0f);
+            portraitImageRect.anchorMax = new Vector2(0f, 0f);
+            portraitImageRect.pivot = new Vector2(0f, 0f);
+            portraitImageRect.sizeDelta = new Vector2(130f, 130f);
+            portraitImageRect.anchoredPosition = new Vector2(10f, 10f);
+            var portraitImage = portraitObject.GetComponent<RawImage>();
+            portraitImage.raycastTarget = false;
+
+            var strikerCaption = Label(portraitCard.transform, "Caption", "YOUR STRIKER", font, 16,
+                Chalk * 0.6f, TextAnchor.UpperLeft, new Vector2(152f, -14f), new Vector2(140f, 22f));
+            var strikerNumber = Label(portraitCard.transform, "Number", "", font, 38, Gold,
+                TextAnchor.UpperLeft, new Vector2(152f, -40f), new Vector2(140f, 44f));
+            var strikerName = Label(portraitCard.transform, "Name", "", font, 24, Chalk,
+                TextAnchor.UpperLeft, new Vector2(152f, -88f), new Vector2(140f, 50f));
+            _ = strikerCaption;
+
             // --- problem card (top centre) -------------------------------------
             // Lives at the top so the lower half of the screen stays clear for the
             // pitch; a bottom bar used to sit right on top of the ball.
@@ -616,6 +711,7 @@ namespace MathStrikers.EditorTools
             hud.Bind(problem, scoreValue, streakValue, scorelineValue, banner, feedback,
                 timerText, fillImage, overlay, title, body, button, buttonLabel);
             hud.BindDifficulty(tierButtons, tierBackgrounds, tierLabels);
+            hud.BindPortrait(portraitImage, strikerName, strikerNumber);
             EditorUtility.SetDirty(hud);
 
             // Silence unused-variable warnings for the static captions.
@@ -690,6 +786,83 @@ namespace MathStrikers.EditorTools
         }
 
         // ---------------------------------------------------------------- assets
+
+        // ------------------------------------------------------------- textures
+
+        /// <summary>
+        /// Procedural grass: fine noise plus a faint blade streak so the pitch has
+        /// surface detail instead of reading as a flat green plane.
+        /// </summary>
+        static Texture2D GrassTexture()
+        {
+            const string path = MaterialsFolder + "/GrassTexture.png";
+            var existing = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+            if (existing != null) return existing;
+
+            const int size = 256;
+            var texture = new Texture2D(size, size, TextureFormat.RGB24, false);
+            var random = new System.Random(20260930);
+
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    float blade = Mathf.PerlinNoise(x * 0.35f, y * 0.08f) * 0.10f;
+                    float speckle = (float)random.NextDouble() * 0.09f;
+                    float shade = 0.80f + blade + speckle;
+                    texture.SetPixel(x, y, new Color(0.24f * shade, 0.55f * shade, 0.27f * shade));
+                }
+            }
+
+            texture.Apply();
+            File.WriteAllBytes(path, texture.EncodeToPNG());
+            Object.DestroyImmediate(texture);
+            AssetDatabase.ImportAsset(path);
+
+            var importer = (TextureImporter)AssetImporter.GetAtPath(path);
+            importer.wrapMode = TextureWrapMode.Repeat;
+            importer.filterMode = FilterMode.Trilinear;
+            importer.anisoLevel = 8;
+            importer.SaveAndReimport();
+
+            return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+        }
+
+        /// <summary>A classic panelled ball, so spin is visible as the ball flies.</summary>
+        static Texture2D BallTexture()
+        {
+            const string path = MaterialsFolder + "/BallTexture.png";
+            var existing = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+            if (existing != null) return existing;
+
+            const int size = 256;
+            var texture = new Texture2D(size, size, TextureFormat.RGB24, false);
+
+            // Dark panels laid out on a grid, nudged per row so they interlock the
+            // way the panels on a real ball do.
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    int row = y / 43;
+                    float offset = (row % 2 == 0) ? 0f : 21f;
+                    float cx = Mathf.Repeat(x + offset, 43f) - 21.5f;
+                    float cy = Mathf.Repeat(y, 43f) - 21.5f;
+                    bool panel = (cx * cx + cy * cy) < 118f;
+
+                    texture.SetPixel(x, y, panel
+                        ? new Color(0.10f, 0.10f, 0.11f)
+                        : new Color(0.97f, 0.97f, 0.95f));
+                }
+            }
+
+            texture.Apply();
+            File.WriteAllBytes(path, texture.EncodeToPNG());
+            Object.DestroyImmediate(texture);
+            AssetDatabase.ImportAsset(path);
+
+            return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+        }
 
         static readonly Dictionary<string, Material> MaterialCache = new Dictionary<string, Material>();
 

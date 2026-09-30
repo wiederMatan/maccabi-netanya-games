@@ -45,6 +45,7 @@ namespace MathStrikers.EditorTools
                 hud.SetBanner("Match 2 — vs Vantage United");
                 hud.SetFeedback("GOAL! Streak ×3 — +38 points");
                 hud.SetTimer(21f, MatchManager.AnswerSeconds);
+                hud.SetStriker(Roster.Squad[6]);
 
                 // -showOverlay captures the start menu instead of live play.
                 if (System.Array.IndexOf(System.Environment.GetCommandLineArgs(), "-showOverlay") >= 0)
