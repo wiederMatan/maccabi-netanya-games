@@ -63,6 +63,8 @@ namespace MathStrikers
         int opponentGoals;
         bool careerStarted;
         SquadMember striker_;
+        Animator strikerAnimator;
+        static readonly int KickTrigger = Animator.StringToHash("Kick");
 
         string CurrentOpponent => Opponents[matchIndex % Opponents.Length];
 
@@ -78,6 +80,8 @@ namespace MathStrikers
 
         void Start()
         {
+            if (striker != null) strikerAnimator = striker.GetComponentInChildren<Animator>();
+
             for (int i = 0; i < zones.Length; i++)
             {
                 zones[i].Configure(i, ZoneIdle, ZoneHover);
@@ -300,20 +304,8 @@ namespace MathStrikers
 
         IEnumerator KickAnimation()
         {
-            if (striker == null) yield break;
-
-            Vector3 home = striker.position;
-            Vector3 lunge = home + striker.forward * 0.55f;
-
-            float t = 0f;
-            while (t < 1f)
-            {
-                t += Time.deltaTime * 6f;
-                striker.position = Vector3.Lerp(home, lunge, Mathf.Sin(Mathf.Clamp01(t) * Mathf.PI));
-                yield return null;
-            }
-
-            striker.position = home;
+            if (strikerAnimator != null) strikerAnimator.SetTrigger(KickTrigger);
+            yield break;
         }
 
         void OnStrikeResolved()

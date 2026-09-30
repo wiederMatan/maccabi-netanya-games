@@ -386,62 +386,89 @@ namespace MathStrikers.EditorTools
             return ball.AddComponent<BallController>();
         }
 
+        const string ModelPath = "Assets/Characters/Remy.fbx";
+        const string StrikerController = "Assets/Characters/StrikerAnimator.controller";
+        const string KeeperController = "Assets/Characters/KeeperAnimator.controller";
+        const float PlayerHeight = 1.82f;
+
         static GoalkeeperController BuildKeeper()
         {
-            var keeper = new GameObject("Goalkeeper");
+            var keeper = SpawnPlayer("Goalkeeper", KeeperController, KeeperTeal, new Color(0.06f, 0.24f, 0.23f));
             keeper.transform.position = new Vector3(0f, 0f, GoalLineZ - 0.35f);
-
-            var shirt = GetMaterial("KeeperKit", KeeperTeal, 0f, 0.22f);
-            var skin = GetMaterial("Skin", Skin, 0f, 0.25f);
-            var glove = GetMaterial("Glove", Gold, 0f, 0.3f);
-
-            AddPart(keeper.transform, "Torso", PrimitiveType.Capsule,
-                new Vector3(0f, 0.95f, 0f), new Vector3(0.52f, 0.46f, 0.32f), shirt);
-            AddPart(keeper.transform, "Head", PrimitiveType.Sphere,
-                new Vector3(0f, 1.52f, 0f), Vector3.one * 0.28f, skin);
-            AddPart(keeper.transform, "ArmLeft", PrimitiveType.Capsule,
-                new Vector3(-0.46f, 1.05f, 0f), new Vector3(0.17f, 0.34f, 0.17f), shirt);
-            AddPart(keeper.transform, "ArmRight", PrimitiveType.Capsule,
-                new Vector3(0.46f, 1.05f, 0f), new Vector3(0.17f, 0.34f, 0.17f), shirt);
-            AddPart(keeper.transform, "GloveLeft", PrimitiveType.Sphere,
-                new Vector3(-0.52f, 0.74f, 0f), Vector3.one * 0.19f, glove);
-            AddPart(keeper.transform, "GloveRight", PrimitiveType.Sphere,
-                new Vector3(0.52f, 0.74f, 0f), Vector3.one * 0.19f, glove);
-            AddPart(keeper.transform, "LegLeft", PrimitiveType.Capsule,
-                new Vector3(-0.16f, 0.36f, 0f), new Vector3(0.19f, 0.36f, 0.19f), shirt);
-            AddPart(keeper.transform, "LegRight", PrimitiveType.Capsule,
-                new Vector3(0.16f, 0.36f, 0f), new Vector3(0.19f, 0.36f, 0.19f), shirt);
-
+            keeper.transform.rotation = Quaternion.LookRotation(Vector3.back);
             return keeper.AddComponent<GoalkeeperController>();
         }
 
         static GameObject BuildStriker()
         {
-            // Stood off to the left of the ball so he frames the shot instead of
-            // covering the goal mouth or the problem text.
-            var striker = new GameObject("Striker");
+            var striker = SpawnPlayer("Striker", StrikerController, KitYellow, KitBlack);
             striker.transform.position = new Vector3(-3.0f, 0f, GoalLineZ - 11.4f);
             striker.transform.rotation = Quaternion.LookRotation(
-                new Vector3(0f, 0f, GoalLineZ) - new Vector3(-3.0f, 0f, GoalLineZ - 11.4f));
-
-            var shirt = GetMaterial("StrikerKit", KitYellow, 0f, 0.22f);
-            var skin = GetMaterial("Skin", Skin, 0f, 0.25f);
-            var shorts = GetMaterial("StrikerShorts", new Color(0.12f, 0.12f, 0.14f), 0f, 0.18f);
-
-            AddPart(striker.transform, "Torso", PrimitiveType.Capsule,
-                new Vector3(0f, 1.0f, 0f), new Vector3(0.50f, 0.44f, 0.30f), shirt);
-            AddPart(striker.transform, "Head", PrimitiveType.Sphere,
-                new Vector3(0f, 1.55f, 0f), Vector3.one * 0.27f, skin);
-            AddPart(striker.transform, "ArmLeft", PrimitiveType.Capsule,
-                new Vector3(-0.42f, 1.05f, 0f), new Vector3(0.16f, 0.32f, 0.16f), shirt);
-            AddPart(striker.transform, "ArmRight", PrimitiveType.Capsule,
-                new Vector3(0.42f, 1.05f, 0f), new Vector3(0.16f, 0.32f, 0.16f), shirt);
-            AddPart(striker.transform, "LegLeft", PrimitiveType.Capsule,
-                new Vector3(-0.15f, 0.38f, 0f), new Vector3(0.19f, 0.38f, 0.19f), shorts);
-            AddPart(striker.transform, "LegRight", PrimitiveType.Capsule,
-                new Vector3(0.15f, 0.38f, 0f), new Vector3(0.19f, 0.38f, 0.19f), shorts);
-
+                new Vector3(0f, 0f, GoalLineZ) - striker.transform.position);
             return striker;
+        }
+
+        /// <summary>
+        /// Drops in the rigged character, scales it to a believable height and
+        /// dresses it in a kit. The Mixamo rig imports several metres tall, so the
+        /// scale is measured from the model rather than hard-coded.
+        /// </summary>
+        static GameObject SpawnPlayer(string name, string controllerPath, Color shirt, Color shorts)
+        {
+            var model = AssetDatabase.LoadAssetAtPath<GameObject>(ModelPath);
+            if (model == null)
+            {
+                Debug.LogError($"[Math Strikers] Character model missing at {ModelPath}");
+                return new GameObject(name);
+            }
+
+            var instance = (GameObject)PrefabUtility.InstantiatePrefab(model);
+            instance.name = name;
+
+            var renderers = instance.GetComponentsInChildren<Renderer>();
+            if (renderers.Length > 0)
+            {
+                var bounds = renderers[0].bounds;
+                foreach (var r in renderers) bounds.Encapsulate(r.bounds);
+                if (bounds.size.y > 0.01f)
+                    instance.transform.localScale = Vector3.one * (PlayerHeight / bounds.size.y);
+            }
+
+            var animator = instance.GetComponent<Animator>();
+            if (animator != null)
+            {
+                animator.runtimeAnimatorController =
+                    AssetDatabase.LoadAssetAtPath<RuntimeAnimatorController>(controllerPath);
+                animator.applyRootMotion = false;
+                animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+            }
+
+            Dress(instance, name, shirt, shorts);
+            return instance;
+        }
+
+        /// <summary>
+        /// The rig's materials arrive untextured and split by body part, so each one
+        /// can simply be painted - which is how the kit becomes club colours.
+        /// </summary>
+        static void Dress(GameObject player, string kitName, Color shirt, Color shorts)
+        {
+            foreach (var renderer in player.GetComponentsInChildren<Renderer>())
+            {
+                Color colour;
+                switch (renderer.name)
+                {
+                    case "Tops":      colour = shirt; break;
+                    case "Bottoms":   colour = shorts; break;
+                    case "Shoes":     colour = new Color(0.94f, 0.94f, 0.92f); break;
+                    case "Hair":      colour = new Color(0.16f, 0.11f, 0.08f); break;
+                    case "Eyelashes": colour = new Color(0.10f, 0.08f, 0.07f); break;
+                    default:          colour = Skin; break;   // Body and Eyes
+                }
+
+                float smoothness = renderer.name == "Shoes" ? 0.3f : 0.18f;
+                renderer.sharedMaterial = GetMaterial($"{kitName}_{renderer.name}", colour, 0f, smoothness);
+            }
         }
 
         static void AddPart(Transform parent, string name, PrimitiveType type,

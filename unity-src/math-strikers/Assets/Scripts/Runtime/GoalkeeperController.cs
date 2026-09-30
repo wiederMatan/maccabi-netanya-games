@@ -14,20 +14,26 @@ namespace MathStrikers
         [SerializeField] float recoverDuration = 0.4f;
         [SerializeField] float diveHeight = 0.55f;
 
+        static readonly int DiveTrigger = Animator.StringToHash("Dive");
+
         Vector3 home;
         Quaternion homeRotation;
         Coroutine routine;
+        Animator animator;
 
         void Awake()
         {
             home = transform.position;
             homeRotation = transform.rotation;
+            animator = GetComponentInChildren<Animator>();
         }
 
         /// <summary>Dive toward a lane centre on the goal line.</summary>
         public void Dive(Vector3 lanePoint)
         {
             if (routine != null) StopCoroutine(routine);
+
+            if (animator != null) animator.SetTrigger(DiveTrigger);
 
             Vector3 target = new Vector3(lanePoint.x, home.y, home.z);
             routine = StartCoroutine(DiveRoutine(target));
@@ -41,22 +47,16 @@ namespace MathStrikers
 
         IEnumerator DiveRoutine(Vector3 target)
         {
+            // The dive clip handles the body; this only carries him sideways to the
+            // lane he picked, so the animation and the travel do not fight.
             Vector3 start = transform.position;
-            float lateral = target.x - start.x;
-            float lean = Mathf.Clamp(lateral * 18f, -72f, 72f);
-            Quaternion targetRotation = homeRotation * Quaternion.Euler(0f, 0f, -lean);
 
             float t = 0f;
             while (t < 1f)
             {
                 t += Time.deltaTime / diveDuration;
                 float eased = 1f - Mathf.Pow(1f - Mathf.Clamp01(t), 3f);
-
-                Vector3 position = Vector3.Lerp(start, target, eased);
-                position.y = home.y + Mathf.Sin(Mathf.Clamp01(t) * Mathf.PI) * diveHeight
-                                    * Mathf.Clamp01(Mathf.Abs(lateral));
-                transform.position = position;
-                transform.rotation = Quaternion.Slerp(homeRotation, targetRotation, eased);
+                transform.position = Vector3.Lerp(start, target, eased);
                 yield return null;
             }
 
