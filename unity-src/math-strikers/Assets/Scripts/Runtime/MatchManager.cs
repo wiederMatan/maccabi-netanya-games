@@ -13,7 +13,12 @@ namespace MathStrikers
         public const float AnswerSeconds = 30f;
         public const int ShotsPerMatch = 5;
         const float RunUpSeconds = 0.55f;
-        const float ContactDelay = 0.42f;
+        // Where the boot meets the ball in Anim_Kick, as a fraction of the clip:
+        // the right foot is moving fastest, at ground level, at 0.75s of 1.5s.
+        const float KickContact = 0.5f;
+        // Fallback if the animator never reports the kick (no striker model).
+        const float KickContactTimeout = 1.2f;
+        static readonly int KickState = Animator.StringToHash("Kick");
 
         public static MatchManager Instance { get; private set; }
 
@@ -367,8 +372,9 @@ namespace MathStrikers
             striker.rotation = facing;
             strikerAnimator?.SetTrigger(KickTrigger);
 
-            // Wait for the swing to reach the ball before it leaves the spot.
-            yield return new WaitForSeconds(ContactDelay);
+            // Release the ball when the boot actually reaches it in the animation,
+            // not after a fixed delay, so the kick and the shot are one action.
+            yield return WaitForKickContact();
 
             audio_?.PlayKick();
             ball?.Strike(target);
@@ -378,6 +384,27 @@ namespace MathStrikers
             // the ball rather than with the boot.
             yield return new WaitForSeconds(0.55f);
             if (onTarget) audio_?.PlayGoal(); else audio_?.PlayMiss();
+        }
+
+        IEnumerator WaitForKickContact()
+        {
+            float waited = 0f;
+            while (waited < KickContactTimeout)
+            {
+                if (strikerAnimator != null && !strikerAnimator.IsInTransition(0))
+                {
+                    var state = strikerAnimator.GetCurrentAnimatorStateInfo(0);
+                    if (state.shortNameHash == KickState && state.normalizedTime >= KickContact) yield break;
+                }
+                else if (strikerAnimator != null)
+                {
+                    // Already blending into the kick: track the clip we are heading to.
+                    var next = strikerAnimator.GetNextAnimatorStateInfo(0);
+                    if (next.shortNameHash == KickState && next.normalizedTime >= KickContact) yield break;
+                }
+                waited += Time.deltaTime;
+                yield return null;
+            }
         }
 
         /// <summary>Put the striker back on his mark for the next question.</summary>

@@ -141,8 +141,8 @@ namespace MathStrikers.EditorTools
         }
 
         /// <summary>
-        /// Two small controllers driven by triggers. The striker runs idle -> kick,
-        /// the keeper idle -> dive, each returning to idle on its own.
+        /// Two small controllers driven by triggers. The striker goes idle -> run ->
+        /// kick, the keeper idle -> dive, each returning to idle on its own.
         /// </summary>
         static bool BuildControllers()
         {
@@ -193,10 +193,14 @@ namespace MathStrikers.EditorTools
             var state = machine.AddState(action.trigger);
             state.motion = action.clip;
 
-            var into = idleState.AddTransition(state);
+            // From any state, not just Idle: the striker is mid-run when the kick
+            // fires, and an Idle-only transition made the kick wait for the run
+            // cycle to finish, so the ball left before the boot swung.
+            var into = machine.AddAnyStateTransition(state);
             into.AddCondition(UnityEditor.Animations.AnimatorConditionMode.If, 0f, action.trigger);
             into.hasExitTime = false;
             into.duration = 0.08f;
+            into.canTransitionToSelf = false;
 
             var back = state.AddTransition(idleState);
             back.hasExitTime = true;
