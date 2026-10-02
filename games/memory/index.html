@@ -18,14 +18,15 @@
     .memory-grid {
       display: grid;
       gap: 8px;
-      max-width: 720px;
+      justify-content: center;
       margin: 0 auto 16px;
     }
     .card {
-      aspect-ratio: 0.75;
+      min-width: 0;
       border-radius: 12px;
       cursor: pointer;
       position: relative;
+      -webkit-transform-style: preserve-3d;
       transform-style: preserve-3d;
       transition: transform 0.4s;
     }
@@ -42,6 +43,7 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
+      -webkit-backface-visibility: hidden;
       backface-visibility: hidden;
     }
     .card-back {
@@ -251,8 +253,11 @@
         const cols = Math.min(n, Math.max(2, Math.floor((width + GAP) / (MIN_CARD + GAP))));
         best = { cols, card: Math.min((width - GAP * (cols - 1)) / cols, MAX_CARD) };
       }
-      grid.style.gridTemplateColumns = `repeat(${best.cols}, 1fr)`;
-      grid.style.maxWidth = Math.floor(best.card * best.cols + GAP * (best.cols - 1)) + 'px';
+      // Fixed pixel tracks: with fr tracks and aspect-ratio cards, iOS WebKit
+      // sized each card to the full board width and the page zoomed out.
+      const cardW = Math.floor(best.card);
+      grid.style.gridTemplateColumns = `repeat(${best.cols}, ${cardW}px)`;
+      grid.style.gridAutoRows = Math.floor(cardW / CARD_RATIO) + 'px';
     }
     window.addEventListener('resize', fitGrid);
     window.addEventListener('orientationchange', fitGrid);

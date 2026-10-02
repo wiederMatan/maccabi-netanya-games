@@ -5,14 +5,13 @@
 }
 
 html {
-  background: #001a3d;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
 
 body {
   font-family: system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
-  background: linear-gradient(135deg, #001a3d 0%, #002b5c 50%, #003087 100%) fixed;
+  background: linear-gradient(135deg, #001a3d 0%, #002b5c 50%, #003087 100%);
   min-height: 100vh;
   min-height: 100dvh;
   color: white;

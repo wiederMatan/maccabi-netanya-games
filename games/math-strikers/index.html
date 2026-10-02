@@ -32,7 +32,8 @@
     }
 
     /* The match fills the viewport edge to edge; the only chrome is a small
-       floating back button laid over the top corner. */
+       floating back button in the bottom corner, clear of the game's HUD at the
+       top and the striker card at the bottom left. */
     #shell {
       position: fixed;
       inset: 0;
@@ -40,8 +41,8 @@
 
     .back {
       position: fixed;
-      top: max(10px, env(safe-area-inset-top));
-      right: max(10px, env(safe-area-inset-right));
+      bottom: max(12px, env(safe-area-inset-bottom));
+      right: max(12px, env(safe-area-inset-right));
       z-index: 10;
       display: inline-block;
       padding: 7px 16px;
