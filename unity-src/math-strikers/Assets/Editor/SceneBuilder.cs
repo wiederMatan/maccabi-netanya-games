@@ -107,7 +107,6 @@ namespace MathStrikers.EditorTools
             BuildGoal();
             BuildPitchMarkings();
             BuildAdBoards();
-            BuildStandees();
             BuildStands();
         }
 
@@ -251,80 +250,6 @@ namespace MathStrikers.EditorTools
                 text.color = yellow ? KitBlack : new Color(0.75f, 0.63f, 0.12f);
                 caption.GetComponent<MeshRenderer>().sharedMaterial = font.material;
             }
-        }
-
-        /// <summary>
-        /// Squad standees flanking the pitch - the club portraits as printed cutouts,
-        /// which is the honest way to use a front-facing bust photo in a 3D scene.
-        /// Placed wide of the shooting lanes so they never mask the goal.
-        /// </summary>
-        static void BuildStandees()
-        {
-            var root = new GameObject("Standees");
-
-            // Spread across the squad so the same face is not repeated side by side.
-            (string asset, float x, float z)[] placements =
-            {
-                ("10-oz",      -6.4f, 3.2f),
-                ("22-samu",     6.4f, 3.2f),
-                ("8-haziza",   -7.8f, 8.0f),
-                ("25-cifrian",  7.8f, 8.0f)
-            };
-
-            const float width = 1.25f;
-            const float height = 1.25f;
-
-            foreach (var (asset, x, z) in placements)
-            {
-                string texturePath = $"Assets/Resources/Players/{asset}.png";
-                var texture = AssetDatabase.LoadAssetAtPath<Texture2D>(texturePath);
-                if (texture == null)
-                {
-                    Debug.LogWarning($"[Math Strikers] Standee portrait missing: {texturePath}");
-                    continue;
-                }
-
-                var standee = new GameObject($"Standee_{asset}");
-                standee.transform.SetParent(root.transform);
-                standee.transform.position = new Vector3(x, height / 2f + 0.34f, z);
-
-                var board = GameObject.CreatePrimitive(PrimitiveType.Quad);
-                board.name = "Cutout";
-                board.transform.SetParent(standee.transform, false);
-                board.transform.localScale = new Vector3(width, height, 1f);
-                Object.DestroyImmediate(board.GetComponent<Collider>());
-
-                var material = GetMaterial($"Standee_{asset}", Color.white, 0f, 0.1f);
-                material.mainTexture = texture;
-                ConfigureCutout(material);
-                board.GetComponent<Renderer>().sharedMaterial = material;
-
-                // A simple plinth so the cutout reads as a standee rather than a
-                // portrait floating above the grass.
-                var plinth = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                plinth.name = "Plinth";
-                plinth.transform.SetParent(standee.transform, false);
-                plinth.transform.localPosition = new Vector3(0f, -height / 2f - 0.16f, 0f);
-                plinth.transform.localScale = new Vector3(width * 0.8f, 0.32f, 0.12f);
-                Object.DestroyImmediate(plinth.GetComponent<Collider>());
-                plinth.GetComponent<Renderer>().sharedMaterial =
-                    GetMaterial("BoardYellow", KitYellow, 0f, 0.25f);
-            }
-        }
-
-        /// <summary>Alpha-tested Standard material, for cutouts with a hard edge.</summary>
-        static void ConfigureCutout(Material material)
-        {
-            material.SetFloat("_Mode", 1f);
-            material.SetOverrideTag("RenderType", "TransparentCutout");
-            material.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.One);
-            material.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.Zero);
-            material.SetInt("_ZWrite", 1);
-            material.SetFloat("_Cutoff", 0.5f);
-            material.EnableKeyword("_ALPHATEST_ON");
-            material.DisableKeyword("_ALPHABLEND_ON");
-            material.DisableKeyword("_ALPHAPREMULTIPLY_ON");
-            material.renderQueue = (int)UnityEngine.Rendering.RenderQueue.AlphaTest;
         }
 
         static void BuildStands()
@@ -645,74 +570,44 @@ namespace MathStrikers.EditorTools
             eventSystem.AddComponent<EventSystem>();
             eventSystem.AddComponent<StandaloneInputModule>();
 
-            // --- top bar -------------------------------------------------------
-            var topBar = Panel(canvasObject.transform, "TopBar",
-                new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, -110f),
+            // --- score bar (bottom) ---------------------------------------------
+            // Along the bottom edge, so the question has the top of the screen to
+            // itself. The page's buttons sit just above its right end.
+            var topBar = Panel(canvasObject.transform, "ScoreBar",
+                new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0f, 110f),
                 new Color(0.05f, 0.11f, 0.17f, 0.82f));
-            SetStretchWidth(topBar, 40f, 40f, -40f, 110f);
+            SetStretchWidth(topBar, 40f, 40f, 30f, 110f);
 
             var scoreLabel = Label(topBar.transform, "ScoreLabel", "SCORE", font, 22, Chalk * 0.7f,
                 TextAnchor.MiddleLeft, new Vector2(30f, -24f), new Vector2(240f, 28f));
             var scoreValue = Label(topBar.transform, "ScoreValue", "0", font, 46, Gold,
                 TextAnchor.MiddleLeft, new Vector2(30f, -66f), new Vector2(240f, 48f));
 
+            // Columns kept tight so the opponent banner fits beside them on a phone.
             var streakLabel = Label(topBar.transform, "StreakLabel", "STREAK", font, 22, Chalk * 0.7f,
-                TextAnchor.MiddleLeft, new Vector2(300f, -24f), new Vector2(240f, 28f));
+                TextAnchor.MiddleLeft, new Vector2(240f, -24f), new Vector2(200f, 28f));
             var streakValue = Label(topBar.transform, "StreakValue", "0", font, 40, Chalk,
-                TextAnchor.MiddleLeft, new Vector2(300f, -66f), new Vector2(240f, 48f));
+                TextAnchor.MiddleLeft, new Vector2(240f, -66f), new Vector2(200f, 48f));
 
             var scorelineLabel = Label(topBar.transform, "ScorelineLabel", "MATCH", font, 22, Chalk * 0.7f,
-                TextAnchor.MiddleLeft, new Vector2(560f, -24f), new Vector2(300f, 28f));
+                TextAnchor.MiddleLeft, new Vector2(430f, -24f), new Vector2(200f, 28f));
             var scorelineValue = Label(topBar.transform, "ScorelineValue", "0 – 0", font, 40, Chalk,
-                TextAnchor.MiddleLeft, new Vector2(560f, -66f), new Vector2(300f, 48f));
+                TextAnchor.MiddleLeft, new Vector2(430f, -66f), new Vector2(200f, 48f));
 
             var banner = Label(topBar.transform, "Banner", "Career", font, 26, Gold,
                 TextAnchor.MiddleRight, new Vector2(-30f, -55f), new Vector2(700f, 40f));
             SetAnchor(banner.rectTransform, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f));
 
-            // --- striker portrait ----------------------------------------------
-            // The real club photo, so the player taking the shots is a recognisable
-            // Maccabi Netanya squad member rather than an anonymous figure.
-            var portraitCard = Panel(canvasObject.transform, "StrikerCard",
-                new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(300f, 150f),
-                new Color(0.05f, 0.11f, 0.17f, 0.85f));
-            var portraitRect = portraitCard.GetComponent<RectTransform>();
-            portraitRect.pivot = new Vector2(0f, 0f);
-            portraitRect.anchorMin = new Vector2(0f, 0f);
-            portraitRect.anchorMax = new Vector2(0f, 0f);
-            portraitRect.sizeDelta = new Vector2(300f, 150f);
-            portraitRect.anchoredPosition = new Vector2(40f, 40f);
-
-            var portraitObject = new GameObject("Portrait",
-                typeof(RectTransform), typeof(CanvasRenderer), typeof(RawImage));
-            portraitObject.transform.SetParent(portraitCard.transform, false);
-            var portraitImageRect = portraitObject.GetComponent<RectTransform>();
-            portraitImageRect.anchorMin = new Vector2(0f, 0f);
-            portraitImageRect.anchorMax = new Vector2(0f, 0f);
-            portraitImageRect.pivot = new Vector2(0f, 0f);
-            portraitImageRect.sizeDelta = new Vector2(130f, 130f);
-            portraitImageRect.anchoredPosition = new Vector2(10f, 10f);
-            var portraitImage = portraitObject.GetComponent<RawImage>();
-            portraitImage.raycastTarget = false;
-
-            var strikerCaption = Label(portraitCard.transform, "Caption", "YOUR STRIKER", font, 16,
-                Chalk * 0.6f, TextAnchor.UpperLeft, new Vector2(152f, -14f), new Vector2(140f, 22f));
-            var strikerNumber = Label(portraitCard.transform, "Number", "", font, 38, Gold,
-                TextAnchor.UpperLeft, new Vector2(152f, -40f), new Vector2(140f, 44f));
-            var strikerName = Label(portraitCard.transform, "Name", "", font, 24, Chalk,
-                TextAnchor.UpperLeft, new Vector2(152f, -88f), new Vector2(140f, 50f));
-            _ = strikerCaption;
-
             // --- problem card (top centre) -------------------------------------
-            // Lives at the top so the lower half of the screen stays clear for the
-            // pitch; a bottom bar used to sit right on top of the ball.
+            // The question is the first thing to read, so it gets the top of the
+            // screen; a bottom bar used to sit right on top of the ball.
             var card = Panel(canvasObject.transform, "ProblemCard",
                 new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(980f, 200f),
                 new Color(0.05f, 0.11f, 0.17f, 0.85f));
             var cardRect = card.GetComponent<RectTransform>();
             cardRect.pivot = new Vector2(0.5f, 1f);
             cardRect.sizeDelta = new Vector2(980f, 200f);
-            cardRect.anchoredPosition = new Vector2(0f, -150f);
+            cardRect.anchoredPosition = new Vector2(0f, -30f);
 
             var problem = Label(card.transform, "Problem", "", font, 64, Chalk,
                 TextAnchor.MiddleCenter, new Vector2(0f, -16f), new Vector2(920f, 80f));
@@ -820,7 +715,6 @@ namespace MathStrikers.EditorTools
             hud.Bind(problem, scoreValue, streakValue, scorelineValue, banner, feedback,
                 timerText, fillImage, overlay, title, body, button, buttonLabel);
             hud.BindDifficulty(tierButtons, tierBackgrounds, tierLabels);
-            hud.BindPortrait(portraitImage, strikerName, strikerNumber);
             EditorUtility.SetDirty(hud);
 
             // Silence unused-variable warnings for the static captions.

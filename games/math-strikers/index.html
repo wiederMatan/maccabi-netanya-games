@@ -32,8 +32,8 @@
     }
 
     /* The match fills the viewport edge to edge; the only chrome is a back
-       button and a sound button floating in the bottom corner, clear of the
-       game's HUD at the top and the striker card at the bottom left. */
+       button and a sound button floating just above the right end of the
+       game's score bar. placeCorner() below keeps them lined up with it. */
     .corner {
       position: fixed;
       bottom: max(12px, env(safe-area-inset-bottom));
@@ -44,37 +44,33 @@
       gap: 8px;
     }
 
-    .sound-toggle {
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-      border: 1.5px solid rgba(255, 204, 0, 0.55);
-      background: rgba(255, 255, 255, 0.10);
-      font-size: 1.15rem;
-      line-height: 1;
-      cursor: pointer;
-      touch-action: manipulation;
-    }
-    .sound-toggle:hover, .sound-toggle:active { background: rgba(255, 204, 0, 0.22); }
     #shell {
       position: fixed;
       inset: 0;
     }
 
-    .back {
-      display: inline-block;
-      padding: 7px 16px;
-      border-radius: 20px;
+    /* Both corner buttons are round symbols, no words, so they stay small. */
+    .back, .sound-toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      padding: 0;
+      border-radius: 50%;
       border: 1.5px solid rgba(255, 204, 0, 0.55);
       background: rgba(255, 255, 255, 0.10);
       color: #ffe680;
       font-weight: bold;
-      font-size: 0.95rem;
+      font-size: 1.3rem;
+      line-height: 1;
       text-decoration: none;
-      white-space: nowrap;
+      cursor: pointer;
       touch-action: manipulation;
     }
-    .back:hover, .back:active { background: rgba(255, 204, 0, 0.22); }
+    .sound-toggle { font-size: 1.15rem; }
+    .back:hover, .back:active,
+    .sound-toggle:hover, .sound-toggle:active { background: rgba(255, 204, 0, 0.22); }
 
     #stage {
       position: absolute;
@@ -145,7 +141,7 @@
 <body>
   <div id="shell">
     <div class="corner">
-      <a class="back" href="../../index.html">← חזרה למשחקים</a>
+      <a class="back" href="../../index.html" aria-label="חזרה למשחקים">←</a>
       <button class="sound-toggle" id="sound-toggle" type="button"></button>
     </div>
 
@@ -199,6 +195,19 @@
     window.addEventListener("resize", fit);
     window.addEventListener("orientationchange", fit);
     fit();
+
+    // The game's HUD is laid out on a 1920x1080 canvas scaled by the geometric
+    // mean of the two ratios (CanvasScaler, match 0.5). Its score bar runs along
+    // the bottom 30 units in, 110 tall, with a 40 unit side margin; sit the
+    // buttons 16 units above it, flush with its right edge.
+    var corner = document.querySelector(".corner");
+    function placeCorner() {
+      var scale = Math.sqrt((window.innerWidth / 1920) * (window.innerHeight / 1080));
+      corner.style.bottom = Math.round((30 + 110 + 16) * scale) + "px";
+      corner.style.right = Math.round(40 * scale) + "px";
+    }
+    window.addEventListener("resize", placeCorner);
+    placeCorner();
 
     function showError(message) {
       loading.style.display = "none";

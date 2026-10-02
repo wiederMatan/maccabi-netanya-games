@@ -15,7 +15,7 @@ namespace MathStrikers
     /// most of the screen as sky, with the striker and goal small at the bottom.
     /// So in portrait the camera moves up and in behind the ball, and aims and
     /// zooms so the striker, the answer boards and the goal fill the band between
-    /// the HUD at the top and the striker card at the bottom.
+    /// the problem card at the top and the score bar at the bottom.
     /// </summary>
     [RequireComponent(typeof(Camera))]
     [ExecuteAlways]
@@ -28,9 +28,10 @@ namespace MathStrikers
         [Header("Portrait")]
         [SerializeField] Vector3 portraitPosition = new Vector3(-0.3f, 4.6f, -7f);
         // Screen band the subject has to fit in, as fractions of the height from
-        // the bottom: clear of the striker card below and the HUD panels above.
-        [SerializeField] float portraitSafeBottom = 0.12f;
-        [SerializeField] float portraitSafeTop = 0.70f;
+        // the bottom: clear of the score bar and the page's buttons below, and the
+        // problem card above.
+        [SerializeField] float portraitSafeBottom = 0.13f;
+        [SerializeField] float portraitSafeTop = 0.86f;
         [SerializeField] float portraitSideMargin = 0.03f;
 
         // What has to stay in shot, in world space. These mirror SceneBuilder and
