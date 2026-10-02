@@ -40,3 +40,23 @@ correct, and checks that the ball, keeper, HUD, and three answer boards are all 
 
 WebGL is built with compression disabled so the files can be served by any static host
 without special `Content-Encoding` headers.
+
+## Sound
+
+`MatchAudio` plays real stadium recordings from `Assets/Resources/Audio/`: a looping
+crowd, the referee's whistle (kick-off, and two short and one long at full time), a
+cheer for a goal, an "ohhh" for a miss, and applause after a win or draw. The kick is
+synthesised, and each recording falls back to a synthesised stand-in if its clip is
+missing. The web page's sound button mutes the game through
+`SendMessage("MatchAudio", "SetMuted", "1")`.
+
+The clips are the same ones the memory game uses, all CC0 or public domain from
+Wikimedia Commons; sources and authors are in `sounds/CREDITS.md` at the repo root.
+
+The web page is generated from `Assets/WebGLTemplates/MaccabiNetanya/index.html`, so
+edit that template rather than `games/math-strikers/index.html`, or the next build
+will overwrite the change.
+
+After shipping a new build, bump `VERSION` in `sw.js` at the repo root: the build's
+file names never change, so phones would otherwise keep playing the cached one.
+

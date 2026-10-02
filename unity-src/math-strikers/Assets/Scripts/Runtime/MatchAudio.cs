@@ -1,22 +1,30 @@
+using System.Collections;
 using UnityEngine;
 
 namespace MathStrikers
 {
     /// <summary>
-    /// All match audio, synthesised at startup rather than shipped as files. A few
-    /// short procedural clips cost nothing to download and keep the WebGL build the
-    /// same size, which matters on a portal children open on phones.
+    /// All match audio. Stadium sounds - crowd, whistle, cheer, groan, applause - are
+    /// real recordings loaded from Resources/Audio (CC0 / public domain, credited in
+    /// the README). The kick is synthesised, and every recording falls back to a
+    /// synthesised stand-in if its clip is missing, so the match is never silent.
     /// </summary>
     [RequireComponent(typeof(AudioSource))]
     public class MatchAudio : MonoBehaviour
     {
         const int SampleRate = 44100;
+        const float CrowdVolume = 0.35f;
+        const float CrowdSwellVolume = 0.75f;
 
         AudioSource source;
+        AudioSource crowdSource;
+        Coroutine crowdRamp;
+
         AudioClip kick;
         AudioClip goal;
         AudioClip miss;
         AudioClip whistle;
+        AudioClip applause;
 
         void Awake()
         {
@@ -25,19 +33,122 @@ namespace MathStrikers
             source.spatialBlend = 0f;
 
             kick = BuildKick();
-            goal = BuildGoal();
-            miss = BuildMiss();
-            whistle = BuildWhistle();
+            goal = Load("Cheer") ?? BuildGoal();
+            miss = Load("Ohh") ?? BuildMiss();
+            whistle = Load("Whistle") ?? BuildWhistle();
+            applause = Load("Applause");
+
+            var crowd = Load("Crowd");
+            if (crowd != null)
+            {
+                crowdSource = gameObject.AddComponent<AudioSource>();
+                crowdSource.clip = crowd;
+                crowdSource.loop = true;
+                crowdSource.playOnAwake = false;
+                crowdSource.spatialBlend = 0f;
+                crowdSource.volume = 0f;
+            }
         }
 
-        public void PlayKick() => Play(kick, 0.85f);
-        public void PlayGoal() => Play(goal, 0.7f);
-        public void PlayMiss() => Play(miss, 0.6f);
-        public void PlayWhistle() => Play(whistle, 0.6f);
+        static AudioClip Load(string name) => Resources.Load<AudioClip>("Audio/" + name);
 
-        void Play(AudioClip clip, float volume)
+        public void PlayKick() => Play(kick, 0.85f);
+        public void PlayMiss() => Play(miss, 0.5f);
+
+        /// <summary>Kick-off: one blast of the whistle, and the crowd settles in.</summary>
+        public void PlayWhistle()
         {
-            if (clip != null && source != null) source.PlayOneShot(clip, volume);
+            Play(whistle, 0.6f);
+            StartCrowd();
+        }
+
+        /// <summary>A goal: a cheer, with the whole crowd lifting behind it.</summary>
+        public void PlayGoal()
+        {
+            Play(goal, 0.8f);
+            SwellCrowd();
+        }
+
+        /// <summary>Full time: two short blasts and a long one, then applause for a win or draw.</summary>
+        public void PlayFullTime(bool applaud)
+        {
+            StartCoroutine(FullTime(applaud));
+        }
+
+        IEnumerator FullTime(bool applaud)
+        {
+            Play(whistle, 0.55f, 1.05f);
+            yield return new WaitForSeconds(0.35f);
+            Play(whistle, 0.55f, 1.05f);
+            yield return new WaitForSeconds(0.35f);
+            Play(whistle, 0.75f, 0.97f);
+            yield return new WaitForSeconds(0.25f);
+            if (applaud && applause != null) Play(applause, 0.8f);
+            if (applaud) SwellCrowd();
+        }
+
+        /// <summary>
+        /// Called from the web page through SendMessage("MatchAudio", "SetMuted", "1"/"0"),
+        /// so the page's sound button silences the game too.
+        /// </summary>
+        public void SetMuted(string value)
+        {
+            AudioListener.volume = value == "1" ? 0f : 1f;
+        }
+
+        void StartCrowd()
+        {
+            if (crowdSource == null) return;
+            if (!crowdSource.isPlaying) crowdSource.Play();
+            RampCrowd(CrowdVolume, 1.5f);
+        }
+
+        void SwellCrowd()
+        {
+            if (crowdSource == null || !crowdSource.isPlaying) return;
+            if (crowdRamp != null) StopCoroutine(crowdRamp);
+            crowdRamp = StartCoroutine(Swell());
+        }
+
+        IEnumerator Swell()
+        {
+            yield return Ramp(CrowdSwellVolume, 0.4f);
+            yield return new WaitForSeconds(1.2f);
+            yield return Ramp(CrowdVolume, 1.8f);
+            crowdRamp = null;
+        }
+
+        void RampCrowd(float target, float seconds)
+        {
+            if (crowdRamp != null) StopCoroutine(crowdRamp);
+            crowdRamp = StartCoroutine(Ramp(target, seconds));
+        }
+
+        IEnumerator Ramp(float target, float seconds)
+        {
+            float from = crowdSource.volume;
+            for (float t = 0f; t < seconds; t += Time.unscaledDeltaTime)
+            {
+                crowdSource.volume = Mathf.Lerp(from, target, t / seconds);
+                yield return null;
+            }
+            crowdSource.volume = target;
+        }
+
+        void Play(AudioClip clip, float volume, float pitch = 1f)
+        {
+            if (clip == null || source == null) return;
+            if (Mathf.Approximately(pitch, 1f))
+            {
+                source.PlayOneShot(clip, volume);
+                return;
+            }
+            // PlayOneShot shares the source's pitch, so pitched shots get their own source.
+            var shot = gameObject.AddComponent<AudioSource>();
+            shot.spatialBlend = 0f;
+            shot.pitch = pitch;
+            shot.PlayOneShot(clip, volume);
+            Destroy(shot, clip.length / pitch + 0.1f);
         }
 
         // ---------------------------------------------------------------- synthesis
@@ -99,7 +210,7 @@ namespace MathStrikers
             });
         }
 
-        /// <summary>Referee's whistle, for the end of a match.</summary>
+        /// <summary>Synthesised referee's whistle, used if the recording is missing.</summary>
         static AudioClip BuildWhistle()
         {
             var random = new System.Random(19);

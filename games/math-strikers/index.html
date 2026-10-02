@@ -31,19 +31,37 @@
       touch-action: none;
     }
 
-    /* The match fills the viewport edge to edge; the only chrome is a small
-       floating back button in the bottom corner, clear of the game's HUD at the
-       top and the striker card at the bottom left. */
+    /* The match fills the viewport edge to edge; the only chrome is a back
+       button and a sound button floating in the bottom corner, clear of the
+       game's HUD at the top and the striker card at the bottom left. */
+    .corner {
+      position: fixed;
+      bottom: max(12px, env(safe-area-inset-bottom));
+      right: max(12px, env(safe-area-inset-right));
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sound-toggle {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: 1.5px solid rgba(255, 204, 0, 0.55);
+      background: rgba(255, 255, 255, 0.10);
+      font-size: 1.15rem;
+      line-height: 1;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+    .sound-toggle:hover, .sound-toggle:active { background: rgba(255, 204, 0, 0.22); }
     #shell {
       position: fixed;
       inset: 0;
     }
 
     .back {
-      position: fixed;
-      bottom: max(12px, env(safe-area-inset-bottom));
-      right: max(12px, env(safe-area-inset-right));
-      z-index: 10;
       display: inline-block;
       padding: 7px 16px;
       border-radius: 20px;
@@ -126,7 +144,10 @@
 </head>
 <body>
   <div id="shell">
-    <a class="back" href="../../index.html">← חזרה למשחקים</a>
+    <div class="corner">
+      <a class="back" href="../../index.html">← חזרה למשחקים</a>
+      <button class="sound-toggle" id="sound-toggle" type="button"></button>
+    </div>
 
     <div id="stage">
       <div id="frame">
@@ -155,6 +176,14 @@
     var barFill = document.querySelector("#bar-fill");
     var errorBox = document.querySelector("#error");
     var errorText = document.querySelector("#error-text");
+    var game = null;
+
+    // The page's sound button mutes the game too; the choice is shared with the
+    // other games and remembered.
+    function sendMute() {
+      if (game) game.SendMessage("MatchAudio", "SetMuted", sfx.isMuted() ? "1" : "0");
+    }
+    sfx.bindToggle(document.getElementById("sound-toggle"), { clips: false, onChange: sendMute });
 
     // Match the drawing buffer to the viewport (capped by device pixel ratio so a
     // phone is not asked to render four times the pixels it can show), and let the
@@ -195,7 +224,9 @@
     script.onload = function () {
       createUnityInstance(canvas, config, function (progress) {
         barFill.style.width = Math.round(progress * 100) + "%";
-      }).then(function () {
+      }).then(function (instance) {
+        game = instance;
+        sendMute();
         loading.style.display = "none";
         fit();
         canvas.focus();

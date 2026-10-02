@@ -69,6 +69,19 @@ namespace MathStrikers
         Animator strikerAnimator;
         Vector3 strikerHome;
         Quaternion strikerHomeRotation;
+
+        // On a portrait phone the striker waits just behind the ball, like a
+        // penalty taker, so CameraFramer can come in close on him and the goal.
+        // Keep in step with CameraFramer.Subject.
+        static readonly Vector3 PortraitStrikerMark = new Vector3(-1.3f, 0f, -1.2f);
+        static bool IsPortrait => Screen.height > Screen.width;
+
+        Vector3 StrikerMark => IsPortrait ? PortraitStrikerMark : strikerHome;
+
+        // Facing the middle of the goal (goal line at z = 12, as in SceneBuilder).
+        Quaternion StrikerMarkRotation => IsPortrait
+            ? Quaternion.LookRotation(new Vector3(0f, 0f, 12f) - PortraitStrikerMark)
+            : strikerHomeRotation;
         static readonly int KickTrigger = Animator.StringToHash("Kick");
         static readonly int RunTrigger = Animator.StringToHash("Run");
 
@@ -204,6 +217,7 @@ namespace MathStrikers
             hud?.HideOverlay();
             hud?.SetScoreline(0, 0);
             hud?.SetBanner($"Match {matchIndex + 1} — vs {CurrentOpponent}");
+            audio_?.PlayWhistle();
             NextShot();
         }
 
@@ -335,7 +349,7 @@ namespace MathStrikers
             Vector3 lookAt = new Vector3(target.x, 0f, target.z) - new Vector3(plant.x, 0f, plant.z);
             Quaternion facing = lookAt.sqrMagnitude > 0.001f
                 ? Quaternion.LookRotation(lookAt)
-                : strikerHomeRotation;
+                : StrikerMarkRotation;
 
             strikerAnimator?.SetTrigger(RunTrigger);
 
@@ -344,8 +358,8 @@ namespace MathStrikers
             {
                 t += Time.deltaTime / RunUpSeconds;
                 float eased = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(t));
-                striker.position = Vector3.Lerp(strikerHome, plant, eased);
-                striker.rotation = Quaternion.Slerp(strikerHomeRotation, facing, eased);
+                striker.position = Vector3.Lerp(StrikerMark, plant, eased);
+                striker.rotation = Quaternion.Slerp(StrikerMarkRotation, facing, eased);
                 yield return null;
             }
 
@@ -372,8 +386,8 @@ namespace MathStrikers
             // Deliberately not StopAllCoroutines: the shot-advance coroutine is the
             // one that called this, and killing it would stall the match.
             if (striker == null) return;
-            striker.position = strikerHome;
-            striker.rotation = strikerHomeRotation;
+            striker.position = StrikerMark;
+            striker.rotation = StrikerMarkRotation;
         }
 
         void OnStrikeResolved()
@@ -404,10 +418,9 @@ namespace MathStrikers
             ball?.Park();
             keeper?.ResetStance();
 
-            audio_?.PlayWhistle();
-
             bool won = playerGoals > opponentGoals;
             bool drew = playerGoals == opponentGoals;
+            audio_?.PlayFullTime(won || drew);
             if (won) matchesWon++;
 
             string verdict = won ? "Victory" : drew ? "Draw" : "Defeat";

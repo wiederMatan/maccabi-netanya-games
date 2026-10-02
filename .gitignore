@@ -16,3 +16,7 @@ unity-src/*/Recordings/
 *.sln
 *.user
 .DS_Store
+
+# Editor files Unity generates
+unity-src/*/.vscode/
+unity-src/*/*.slnx

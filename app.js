@@ -24,14 +24,16 @@
   // Stadium sound for the web games. Clips are CC0 / public-domain recordings
   // (see sounds/CREDITS.md); the ball kick is synthesised. A page opts in by
   // calling sfx.bindToggle(), which loads the clips straight away; iOS only lets
-  // audio play once the player has tapped, so the first tap resumes it.
+  // audio play once the player has tapped, so the first tap resumes it. A page
+  // with its own audio (Math Strikers) passes { clips: false } and an onChange
+  // callback, and just shares the one remembered mute setting.
   function createSfx() {
     var MUTE_KEY = 'maccabi-netanya-muted';
     var CLIPS = ['crowd', 'cheer', 'ohh', 'whistle', 'applause'];
     var base = (document.currentScript && document.currentScript.src || '/app.js').replace(/app\.js.*$/, 'sounds/');
     var ctx = null, master = null, buffers = {}, loading = null, unlocked = false;
     var crowd = null, crowdGain = null, wantCrowd = false;
-    var muted = false;
+    var muted = false, listeners = [];
     try { muted = localStorage.getItem(MUTE_KEY) === '1'; } catch (e) {}
 
     function init() {
@@ -134,6 +136,7 @@
       try { localStorage.setItem(MUTE_KEY, muted ? '1' : '0'); } catch (e) {}
       if (master) master.gain.setTargetAtTime(muted ? 0 : 1, ctx.currentTime, 0.05);
       document.querySelectorAll('.sound-toggle').forEach(render);
+      listeners.forEach(function (fn) { fn(muted); });
     }
 
     function render(btn) {
@@ -167,8 +170,10 @@
       },
       isMuted: function () { return muted; },
       toggle: function () { setMuted(!muted); },
-      bindToggle: function (btn) {
-        init();
+      bindToggle: function (btn, options) {
+        options = options || {};
+        if (options.clips !== false) init();
+        if (options.onChange) listeners.push(options.onChange);
         render(btn);
         btn.addEventListener('click', function () { unlock(); setMuted(!muted); });
       }
