@@ -4,18 +4,36 @@
   padding: 0;
 }
 
+html {
+  background: #001a3d;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
-  font-family: 'Segoe UI', Arial, sans-serif;
-  background: linear-gradient(135deg, #001a3d 0%, #002b5c 50%, #003087 100%);
+  font-family: system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
+  background: linear-gradient(135deg, #001a3d 0%, #002b5c 50%, #003087 100%) fixed;
   min-height: 100vh;
+  min-height: 100dvh;
   color: white;
   direction: rtl;
+  /* Feel like an app, not a web page: no rubber-band reveal, no grey tap flash,
+     no text selection or long-press callouts, no double-tap zoom. */
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
 }
+
+img { -webkit-user-drag: none; }
 
 #portal {
   max-width: 900px;
   margin: 0 auto;
-  padding: 30px 20px;
+  padding: max(30px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right))
+           max(30px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
 }
 
 header {
@@ -35,7 +53,7 @@ header {
 }
 
 h1 {
-  font-size: 2.8em;
+  font-size: clamp(1.9em, 8vw, 2.8em);
   color: #ffcc00;
   text-shadow: 3px 3px 0px #b38f00, 0 0 20px rgba(255,204,0,0.5);
   margin: 10px 0;
@@ -93,8 +111,16 @@ h1 {
   gap: 6px;
 }
 
-.game-card:hover {
-  transform: translateY(-6px);
+@media (hover: hover) {
+  .game-card:hover {
+    transform: translateY(-6px);
+    border-color: #ffcc00;
+    background: rgba(255,255,255,0.14);
+  }
+}
+
+.game-card:active {
+  transform: scale(0.97);
   border-color: #ffcc00;
   background: rgba(255,255,255,0.14);
 }
@@ -125,24 +151,29 @@ h1 {
 .game-container {
   max-width: 760px;
   margin: 0 auto;
-  padding: 24px 16px 60px;
+  padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+           max(40px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
   text-align: center;
 }
 
 .back-btn {
-  display: inline-block;
-  color: #ffcc00;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 22px;
+  border: 1.5px solid rgba(255,204,0,0.55);
+  background: rgba(255,255,255,0.10);
+  color: #ffe680;
   text-decoration: none;
   font-weight: bold;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 
-.back-btn:hover {
-  text-decoration: underline;
-}
+.back-btn:active { background: rgba(255,204,0,0.22); }
 
 .game-title-bar {
-  font-size: 2em;
+  font-size: clamp(1.5em, 6.5vw, 2em);
   font-weight: bold;
   color: #ffcc00;
   margin-bottom: 18px;
@@ -152,7 +183,7 @@ h1 {
 .score-bar {
   display: flex;
   justify-content: center;
-  gap: 24px;
+  gap: 8px 12px;
   flex-wrap: wrap;
   margin-bottom: 20px;
   font-size: 1.05em;
@@ -162,13 +193,15 @@ h1 {
   background: rgba(255,255,255,0.08);
   border: 1px solid rgba(255,204,0,0.3);
   border-radius: 12px;
-  padding: 8px 16px;
+  padding: 8px 14px;
+  white-space: nowrap;
 }
 
 .btn {
   display: inline-block;
   border: none;
   border-radius: 14px;
+  min-height: 48px;
   padding: 12px 26px;
   font-size: 1.05em;
   font-weight: bold;
@@ -178,9 +211,11 @@ h1 {
   font-family: inherit;
 }
 
-.btn:hover {
-  transform: translateY(-2px);
+@media (hover: hover) {
+  .btn:hover { transform: translateY(-2px); }
 }
+
+.btn:active { transform: scale(0.96); }
 
 .btn-primary {
   background: linear-gradient(135deg, #ffcc00, #e6b800);
@@ -194,17 +229,39 @@ h1 {
   border: 1.5px solid rgba(255,204,0,0.4);
 }
 
+/* The win message is a modal sheet over the board, like a native dialog. */
 .win-message {
   display: none;
-  background: rgba(255,204,0,0.15);
-  border: 2px solid #ffcc00;
-  border-radius: 15px;
-  padding: 20px;
-  margin-top: 20px;
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  align-items: center;
+  justify-content: center;
+  padding: max(20px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right))
+           max(20px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+  background: rgba(0, 10, 30, 0.7);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
   font-size: 1.3em;
 }
 
-.win-message.show { display: block; }
+.win-message.show {
+  display: flex;
+  animation: fade-in 0.25s ease-out;
+}
+
+.win-sheet {
+  width: min(420px, 100%);
+  background: linear-gradient(135deg, #002b5c, #003087);
+  border: 2px solid #ffcc00;
+  border-radius: 22px;
+  padding: 24px 18px 16px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  animation: pop-in 0.3s cubic-bezier(.2,1.4,.4,1);
+}
+
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes pop-in { from { transform: scale(0.85); opacity: 0; } }
 
 /* ---- level select ---- */
 .level-select {
@@ -226,8 +283,16 @@ h1 {
   transition: transform 0.2s, border-color 0.2s, background 0.2s;
 }
 
-.level-btn:hover {
-  transform: translateY(-4px);
+@media (hover: hover) {
+  .level-btn:hover {
+    transform: translateY(-4px);
+    border-color: #ffcc00;
+    background: rgba(255,255,255,0.14);
+  }
+}
+
+.level-btn:active {
+  transform: scale(0.96);
   border-color: #ffcc00;
   background: rgba(255,255,255,0.14);
 }
@@ -235,3 +300,18 @@ h1 {
 .level-btn .level-icon { font-size: 2em; margin-bottom: 6px; }
 .level-btn .level-name { font-size: 1.15em; font-weight: bold; color: #ffcc00; }
 .level-btn .level-desc { font-size: 0.85em; color: #cfe0ff; margin-top: 4px; }
+
+/* ---- phones ---- */
+@media (max-width: 520px) {
+  header { margin-bottom: 24px; }
+  .games-grid { gap: 14px; }
+  .game-card { padding: 18px 14px; }
+  .level-select { grid-template-columns: 1fr 1fr; gap: 12px; }
+  .level-btn { padding: 16px 10px; }
+  .score-bar { font-size: 0.95em; }
+  .btn { padding: 12px 18px; margin: 6px 4px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

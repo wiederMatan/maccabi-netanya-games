@@ -1,5 +1,9 @@
 {
   "version": 2,
   "builds": [{ "src": "**/*", "use": "@vercel/static" }],
-  "routes": [{ "src": "/(.*)", "dest": "/$1" }]
+  "routes": [
+    { "src": "/sw.js", "headers": { "cache-control": "no-cache", "service-worker-allowed": "/" }, "dest": "/sw.js" },
+    { "src": "/manifest.webmanifest", "headers": { "content-type": "application/manifest+json" }, "dest": "/manifest.webmanifest" },
+    { "src": "/(.*)", "dest": "/$1" }
+  ]
 }

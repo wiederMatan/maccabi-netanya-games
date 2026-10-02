@@ -2,7 +2,16 @@
 <html lang="he" dir="rtl">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#001a3d">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="מכבי נתניה">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
   <title>Math Strikers — מכבי נתניה</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -14,6 +23,12 @@
       background: linear-gradient(135deg, #001a3d 0%, #002b5c 50%, #003087 100%);
       color: #fff;
       direction: rtl;
+      overscroll-behavior: none;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+      touch-action: none;
     }
 
     /* The match fills the viewport edge to edge; the only chrome is a small
@@ -38,8 +53,9 @@
       font-size: 0.95rem;
       text-decoration: none;
       white-space: nowrap;
+      touch-action: manipulation;
     }
-    .back:hover { background: rgba(255, 204, 0, 0.22); }
+    .back:hover, .back:active { background: rgba(255, 204, 0, 0.22); }
 
     #stage {
       position: absolute;
@@ -58,6 +74,7 @@
       width: 100%;
       height: 100%;
       background: #0b1f16;
+      touch-action: none;
     }
 
     #loading {
@@ -128,6 +145,7 @@
     </div>
   </div>
 
+  <script src="../../app.js"></script>
   <script>
     var canvas = document.querySelector("#unity-canvas");
     var frame = document.querySelector("#frame");

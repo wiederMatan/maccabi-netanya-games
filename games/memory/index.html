@@ -2,15 +2,24 @@
 <html lang="he" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#001a3d">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="מכבי נתניה">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
   <title>משחק זיכרון - מכבי נתניה</title>
   <link rel="stylesheet" href="../../style.css">
   <style>
     .memory-grid {
       display: grid;
-      gap: 10px;
+      gap: 8px;
       max-width: 720px;
-      margin: 0 auto 25px;
+      margin: 0 auto 16px;
     }
     .card {
       aspect-ratio: 0.75;
@@ -21,7 +30,10 @@
       transition: transform 0.4s;
     }
     .card.flipped { transform: rotateY(180deg); }
-    .card.matched { opacity: 0.55; cursor: default; }
+    .card.matched { cursor: default; }
+    /* Dim the faces, not the card: opacity on the card itself would flatten its
+       3D context and show the back face through. */
+    .card.matched .card-face { opacity: 0.55; }
     .card-face {
       position: absolute;
       inset: 0;
@@ -57,10 +69,29 @@
       text-align: center;
       line-height: 1.15;
     }
-    .grid-easy   { grid-template-columns: repeat(4, 1fr); }
-    .grid-medium { grid-template-columns: repeat(6, 1fr); }
-    .grid-hard   { grid-template-columns: repeat(6, 1fr); }
-    .grid-expert { grid-template-columns: repeat(8, 1fr); }
+    .card-back { font-size: clamp(1.1em, 6vw, 2em); }
+    .card.shake { animation: shake 0.35s; }
+    @keyframes shake {
+      25% { translate: -4px 0; }
+      75% { translate: 4px 0; }
+    }
+    /* Phone on its side: drop the title and tighten the header so the board
+       gets the height. */
+    @media (max-height: 500px) and (orientation: landscape) {
+      body.playing .game-title-bar { display: none; }
+      body.playing .game-container { padding-bottom: max(4px, env(safe-area-inset-bottom)); }
+      body.playing .back-btn { position: absolute; margin: 0; min-height: 38px;
+        top: max(8px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); }
+      body.playing .score-bar { margin: 2px 0 8px; padding: 0 130px 0 0; justify-content: flex-start; }
+      body.playing .score-item { padding: 6px 12px; }
+      body.playing .btn { min-height: 40px; padding: 8px 18px; margin: 4px; }
+    }
+    @media (max-width: 520px) {
+      .card, .card-face { border-radius: 9px; }
+      .card-back, .card-front { border-width: 2px; }
+      .card-front { padding: 3px; }
+      .card-front .pup-name { font-size: 0.6em; }
+    }
   </style>
 </head>
 <body>
@@ -98,15 +129,18 @@
         <div class="score-item">זוגות: <strong id="matched">0</strong> / <span id="total-pairs">0</span></div>
       </div>
       <div class="memory-grid" id="grid"></div>
-      <div class="win-message" id="win-msg">
-        🎉 כל הכבוד! מצאת את כל הזוגות!<br>⭐ קיבלת כוכב!<br><br>
-        <button class="btn btn-primary" onclick="startGame(currentLevel)">שחק שוב</button>
-        <button class="btn btn-secondary" onclick="showLevelSelect()">בחר רמה אחרת</button>
+      <div class="win-message" id="win-msg" role="dialog" aria-modal="true">
+        <div class="win-sheet">
+          🎉 כל הכבוד! מצאת את כל הזוגות!<br>⭐ קיבלת כוכב!<br><br>
+          <button class="btn btn-primary" onclick="startGame(currentLevel)">שחק שוב</button>
+          <button class="btn btn-secondary" onclick="showLevelSelect()">בחר רמה אחרת</button>
+        </div>
       </div>
       <button class="btn btn-primary" onclick="startGame(currentLevel)">התחל מחדש</button>
       <button class="btn btn-secondary" onclick="showLevelSelect()">בחר רמה אחרת</button>
     </div>
   </div>
+  <script src="../../app.js"></script>
   <script>
     // Maccabi Netanya squad
     const roster = [
@@ -138,10 +172,10 @@
     ];
 
     const LEVELS = {
-      easy:   { label: 'קל',     pairs: 6,  gridClass: 'grid-easy' },
-      medium: { label: 'בינוני', pairs: 9,  gridClass: 'grid-medium' },
-      hard:   { label: 'קשה',    pairs: 12, gridClass: 'grid-hard' },
-      expert: { label: 'מומחה',  pairs: 16, gridClass: 'grid-expert' },
+      easy:   { label: 'קל',     pairs: 6 },
+      medium: { label: 'בינוני', pairs: 9 },
+      hard:   { label: 'קשה',    pairs: 12 },
+      expert: { label: 'מומחה',  pairs: 16 },
     };
 
     let flipped = [], matched = 0, attempts = 0, locked = false, currentLevel = 'easy', totalPairs = 6;
@@ -149,7 +183,9 @@
     function shuffle(arr) { return [...arr].sort(() => Math.random() - 0.5); }
 
     function showLevelSelect() {
+      document.getElementById('win-msg').classList.remove('show');
       document.getElementById('level-select').style.display = 'grid';
+      document.body.classList.remove('playing');
       document.getElementById('game-area').style.display = 'none';
     }
 
@@ -160,6 +196,7 @@
 
       document.getElementById('level-select').style.display = 'none';
       document.getElementById('game-area').style.display = 'block';
+      document.body.classList.add('playing');
       document.getElementById('level-label').textContent = cfg.label;
       document.getElementById('total-pairs').textContent = totalPairs;
 
@@ -172,7 +209,6 @@
       const cards = shuffle([...chosen, ...chosen].map((p, i) => ({ ...p, uid: i })));
 
       const grid = document.getElementById('grid');
-      grid.className = 'memory-grid ' + cfg.gridClass;
       grid.innerHTML = '';
       cards.forEach(card => {
         const el = document.createElement('div');
@@ -187,11 +223,44 @@
         el.addEventListener('click', () => flipCard(el));
         grid.appendChild(el);
       });
+      fitGrid();
+      window.scrollTo(0, 0);
     }
+
+    // Pick the column count that gives the biggest cards while the whole board
+    // fits on screen, in portrait or landscape. If even the best fit would make
+    // cards too small to tap, keep them tappable and let the board scroll.
+    const GAP = 8, MIN_CARD = 64, MAX_CARD = 120, CARD_RATIO = 0.75;
+    function fitGrid() {
+      const grid = document.getElementById('grid');
+      const n = grid.children.length;
+      if (!n || document.getElementById('game-area').style.display === 'none') return;
+      const width = grid.parentElement.clientWidth;
+      const top = grid.getBoundingClientRect().top + window.scrollY;
+      // Room under the board for the restart buttons and bottom padding.
+      const height = window.innerHeight - top - (window.innerHeight < 500 ? 72 : 120);
+      let best = { cols: 4, card: 0 };
+      for (let cols = 2; cols <= n; cols++) {
+        const rows = Math.ceil(n / cols);
+        const byWidth = (width - GAP * (cols - 1)) / cols;
+        const byHeight = ((height - GAP * (rows - 1)) / rows) * CARD_RATIO;
+        const card = Math.min(byWidth, byHeight, MAX_CARD);
+        if (card > best.card) best = { cols, card };
+      }
+      if (best.card < MIN_CARD) {
+        const cols = Math.min(n, Math.max(2, Math.floor((width + GAP) / (MIN_CARD + GAP))));
+        best = { cols, card: Math.min((width - GAP * (cols - 1)) / cols, MAX_CARD) };
+      }
+      grid.style.gridTemplateColumns = `repeat(${best.cols}, 1fr)`;
+      grid.style.maxWidth = Math.floor(best.card * best.cols + GAP * (best.cols - 1)) + 'px';
+    }
+    window.addEventListener('resize', fitGrid);
+    window.addEventListener('orientationchange', fitGrid);
 
     function flipCard(el) {
       if (locked || el.classList.contains('flipped') || el.classList.contains('matched')) return;
       el.classList.add('flipped');
+      haptic(10);
       flipped.push(el);
       if (flipped.length === 2) {
         locked = true;
@@ -207,9 +276,17 @@
         a.classList.add('matched'); b.classList.add('matched');
         matched++;
         document.getElementById('matched').textContent = matched;
-        if (matched === totalPairs) { document.getElementById('win-msg').classList.add('show'); addStar(); }
+        if (matched === totalPairs) {
+          document.getElementById('win-msg').classList.add('show');
+          haptic([40, 60, 40, 60, 120]);
+          addStar();
+        } else {
+          haptic(35);
+        }
       } else {
         a.classList.remove('flipped'); b.classList.remove('flipped');
+        a.classList.add('shake'); b.classList.add('shake');
+        setTimeout(() => { a.classList.remove('shake'); b.classList.remove('shake'); }, 400);
       }
       flipped = []; locked = false;
     }
