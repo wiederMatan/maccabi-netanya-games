@@ -15,7 +15,164 @@
     if (navigator.vibrate) navigator.vibrate(pattern || 15);
   };
 
+  window.sfx = createSfx();
+
   if (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone) {
     document.documentElement.classList.add('standalone');
   }
+
+  // Stadium sound for the web games. Clips are CC0 / public-domain recordings
+  // (see sounds/CREDITS.md); the ball kick is synthesised. A page opts in by
+  // calling sfx.bindToggle(), which loads the clips straight away; iOS only lets
+  // audio play once the player has tapped, so the first tap resumes it.
+  function createSfx() {
+    var MUTE_KEY = 'maccabi-netanya-muted';
+    var CLIPS = ['crowd', 'cheer', 'ohh', 'whistle', 'applause'];
+    var base = (document.currentScript && document.currentScript.src || '/app.js').replace(/app\.js.*$/, 'sounds/');
+    var ctx = null, master = null, buffers = {}, loading = null, unlocked = false;
+    var crowd = null, crowdGain = null, wantCrowd = false;
+    var muted = false;
+    try { muted = localStorage.getItem(MUTE_KEY) === '1'; } catch (e) {}
+
+    function init() {
+      if (ctx) return true;
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return false;
+      ctx = new AC();
+      master = ctx.createGain();
+      master.gain.value = muted ? 0 : 1;
+      master.connect(ctx.destination);
+      load();
+      return true;
+    }
+    function unlock() {
+      if (!ctx) return;
+      if (ctx.state !== 'running' && !document.hidden) ctx.resume();
+      if (unlocked) return;
+      unlocked = true;
+      // A silent buffer played inside the tap is what actually unlocks iOS.
+      var src = ctx.createBufferSource();
+      src.buffer = ctx.createBuffer(1, 1, 22050);
+      src.connect(ctx.destination);
+      src.start(0);
+    }
+    document.addEventListener('pointerdown', unlock, true);
+    document.addEventListener('touchend', unlock, true);
+    document.addEventListener('keydown', unlock, true);
+
+    function load() {
+      if (loading) return loading;
+      loading = Promise.all(CLIPS.map(function (name) {
+        return fetch(base + name + '.m4a')
+          .then(function (r) { return r.arrayBuffer(); })
+          .then(function (data) {
+            return new Promise(function (ok, fail) { ctx.decodeAudioData(data, ok, fail); });
+          })
+          .then(function (buf) { buffers[name] = buf; })
+          .catch(function () {});
+      })).then(function () { if (wantCrowd) startCrowd(); });
+      return loading;
+    }
+
+    function play(name, volume, rate) {
+      if (!ctx || !buffers[name]) return;
+      var src = ctx.createBufferSource();
+      var gain = ctx.createGain();
+      src.buffer = buffers[name];
+      src.playbackRate.value = rate || 1;
+      gain.gain.value = volume == null ? 1 : volume;
+      src.connect(gain).connect(master);
+      src.start();
+    }
+
+    // A short low thump with a touch of noise, like a boot on a ball.
+    function kick() {
+      if (!ctx) return;
+      var t = ctx.currentTime;
+      var osc = ctx.createOscillator(), g = ctx.createGain();
+      osc.frequency.setValueAtTime(150, t);
+      osc.frequency.exponentialRampToValueAtTime(45, t + 0.12);
+      g.gain.setValueAtTime(0.9, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+      osc.connect(g).connect(master);
+      osc.start(t); osc.stop(t + 0.17);
+
+      var len = Math.floor(ctx.sampleRate * 0.03);
+      var noise = ctx.createBuffer(1, len, ctx.sampleRate), d = noise.getChannelData(0);
+      for (var i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+      var n = ctx.createBufferSource(), ng = ctx.createGain(), hp = ctx.createBiquadFilter();
+      hp.type = 'highpass'; hp.frequency.value = 1500;
+      n.buffer = noise; ng.gain.value = 0.25;
+      n.connect(hp).connect(ng).connect(master);
+      n.start(t);
+    }
+
+    function startCrowd() {
+      if (!ctx || !buffers.crowd || crowd) return;
+      crowd = ctx.createBufferSource();
+      crowdGain = ctx.createGain();
+      crowd.buffer = buffers.crowd;
+      crowd.loop = true;
+      crowdGain.gain.setValueAtTime(0, ctx.currentTime);
+      crowdGain.gain.linearRampToValueAtTime(0.35, ctx.currentTime + 1.5);
+      crowd.connect(crowdGain).connect(master);
+      crowd.start();
+    }
+
+    function stopCrowd(fade) {
+      if (!crowd) return;
+      var c = crowd, t = ctx.currentTime, f = fade == null ? 1 : fade;
+      crowdGain.gain.cancelScheduledValues(t);
+      crowdGain.gain.setValueAtTime(crowdGain.gain.value, t);
+      crowdGain.gain.linearRampToValueAtTime(0, t + f);
+      c.stop(t + f + 0.05);
+      crowd = null;
+    }
+
+    function setMuted(value) {
+      muted = value;
+      try { localStorage.setItem(MUTE_KEY, muted ? '1' : '0'); } catch (e) {}
+      if (master) master.gain.setTargetAtTime(muted ? 0 : 1, ctx.currentTime, 0.05);
+      document.querySelectorAll('.sound-toggle').forEach(render);
+    }
+
+    function render(btn) {
+      btn.textContent = muted ? '🔇' : '🔊';
+      btn.setAttribute('aria-label', muted ? 'הפעל צלילים' : 'השתק צלילים');
+      btn.setAttribute('aria-pressed', String(!muted));
+    }
+
+    // Stop everything when the app goes to the background, pick up on return.
+    document.addEventListener('visibilitychange', function () {
+      if (!ctx || !unlocked) return;
+      if (document.hidden) ctx.suspend(); else ctx.resume();
+    });
+
+    return {
+      kick: kick,
+      cheer: function () { play('cheer', 0.8, 0.95 + Math.random() * 0.1); },
+      ohh: function () { play('ohh', 0.45); },
+      whistle: function () { play('whistle', 0.7); },
+      // Referee's full-time whistle: two short blasts and a long one.
+      finalWhistle: function () {
+        if (!ctx) return;
+        [0, 0.35, 0.7].forEach(function (delay, i) {
+          setTimeout(function () { play('whistle', i === 2 ? 0.8 : 0.6, i === 2 ? 0.97 : 1.05); }, delay * 1000);
+        });
+      },
+      applause: function () { play('applause', 0.8); },
+      crowd: function (on) {
+        wantCrowd = on;
+        if (on) startCrowd(); else stopCrowd();
+      },
+      isMuted: function () { return muted; },
+      toggle: function () { setMuted(!muted); },
+      bindToggle: function (btn) {
+        init();
+        render(btn);
+        btn.addEventListener('click', function () { unlock(); setMuted(!muted); });
+      }
+    };
+  }
 })();
+
