@@ -1,0 +1,59 @@
+# Emails when a production deploy on Vercel has finished.
+#
+# Vercel's own email notifications only cover failed deployments. But every
+# Vercel deploy is also registered on GitHub as a deployment, and Vercel marks
+# it "success" once it is live, which is the event this listens for.
+#
+# Needs two repository secrets (Settings > Secrets and variables > Actions):
+#   GMAIL_USERNAME      the Gmail address, used as both sender and recipient
+#   GMAIL_APP_PASSWORD  a Gmail app password (not the account password)
+# Until both are set the job skips the email with a warning instead of failing.
+
+name: Email on deploy
+
+on: deployment_status
+
+permissions:
+  contents: read
+
+jobs:
+  email:
+    if: >-
+      github.event.deployment_status.state == 'success' &&
+      github.event.deployment.environment == 'Production'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Gather deploy details
+        id: details
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.deployment.sha }}
+          HAS_CREDENTIALS: ${{ secrets.GMAIL_USERNAME != '' && secrets.GMAIL_APP_PASSWORD != '' }}
+        run: |
+          echo "ready=$HAS_CREDENTIALS" >> "$GITHUB_OUTPUT"
+          if [ "$HAS_CREDENTIALS" != "true" ]; then
+            echo "::warning::GMAIL_USERNAME / GMAIL_APP_PASSWORD secrets are not set, so no email was sent."
+          fi
+          message=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA" --jq '.commit.message | split("\n")[0]')
+          echo "short_sha=${SHA:0:7}" >> "$GITHUB_OUTPUT"
+          echo "message=$message" >> "$GITHUB_OUTPUT"
+
+      - name: Send the email
+        if: steps.details.outputs.ready == 'true'
+        uses: dawidd6/action-send-mail@67ce3558d613188179559c61d3565140cf389968 # v22
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.GMAIL_USERNAME }}
+          password: ${{ secrets.GMAIL_APP_PASSWORD }}
+          from: Maccabi Netanya Games <${{ secrets.GMAIL_USERNAME }}>
+          to: ${{ secrets.GMAIL_USERNAME }}
+          subject: "✅ Deployed: ${{ steps.details.outputs.message }}"
+          body: |
+            The site finished deploying and is live.
+
+            Commit:  ${{ steps.details.outputs.short_sha }} – ${{ steps.details.outputs.message }}
+            Site:    https://maccabi-netanya-games.vercel.app
+            This deploy: ${{ github.event.deployment_status.environment_url }}
+            Commit page: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.event.deployment.sha }}
