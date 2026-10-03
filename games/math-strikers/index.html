@@ -223,6 +223,9 @@
       companyName: "Maccabi Netanya Games",
       productName: "Math Strikers",
       productVersion: "1.0",
+      // Same cap as fit(): without it Unity sizes the drawing buffer from the raw
+      // devicePixelRatio and renders at 3x on recent iPhones.
+      devicePixelRatio: Math.min(window.devicePixelRatio || 1, 2),
       showBanner: function (message, type) {
         if (type === "error") showError(message);
       }
