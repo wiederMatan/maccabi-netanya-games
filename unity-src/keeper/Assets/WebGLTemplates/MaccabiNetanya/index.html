@@ -35,9 +35,9 @@
        button and a sound button floating just above the right end of the
        game's score bar. placeCorner() below keeps them lined up with it. */
     .corner {
-      position: fixed;
-      bottom: max(12px, env(safe-area-inset-bottom));
-      right: max(12px, env(safe-area-inset-right));
+      position: absolute;
+      bottom: 12px;
+      right: 12px;
       z-index: 10;
       display: flex;
       align-items: center;
@@ -47,6 +47,7 @@
     #shell {
       position: fixed;
       inset: 0;
+      background: #001a3d;
     }
 
     /* Both corner buttons are round symbols, no words, so they stay small. */
@@ -77,9 +78,15 @@
       inset: 0;
     }
 
+    /* The game stays inside the safe area: clear of the status bar and notch
+       above and the home indicator below. The bands outside it show the
+       shell's navy, like the bars around a native app. */
     #frame {
       position: absolute;
-      inset: 0;
+      top: env(safe-area-inset-top, 0px);
+      right: env(safe-area-inset-right, 0px);
+      bottom: env(safe-area-inset-bottom, 0px);
+      left: env(safe-area-inset-left, 0px);
       background: #000;
       overflow: hidden;
     }
@@ -172,6 +179,7 @@
     var barFill = document.querySelector("#bar-fill");
     var errorBox = document.querySelector("#error");
     var errorText = document.querySelector("#error-text");
+    frame.appendChild(document.querySelector(".corner"));
     var game = null;
 
     // The page's sound button mutes the game too; the choice is shared with the
@@ -184,16 +192,38 @@
     // Match the drawing buffer to the viewport (capped by device pixel ratio so a
     // phone is not asked to render four times the pixels it can show), and let the
     // game camera widen instead of letterboxing.
-    function fit() {
-      var ratio = Math.min(window.devicePixelRatio || 1, 2);
-      canvas.width = Math.floor(window.innerWidth * ratio);
-      canvas.height = Math.floor(window.innerHeight * ratio);
-      canvas.style.width = window.innerWidth + "px";
-      canvas.style.height = window.innerHeight + "px";
+    // Installed on an iPhone (standalone, black-translucent status bar) the page
+    // is drawn from the very top of the screen, but iOS reports a viewport that
+    // is short by the status bar - so a full-height layout stops early and
+    // leaves a white band at the bottom. There, size the shell to the real
+    // screen. The frame inside it keeps clear of the status bar and the home
+    // indicator via the safe-area insets, and everything sizes from the frame.
+    var shell = document.querySelector("#shell");
+    var installedOnIOS = window.navigator.standalone === true;
+    function sizeShell() {
+      if (!installedOnIOS) return;
+      var portrait = window.matchMedia("(orientation: portrait)").matches;
+      var longSide = Math.max(screen.width, screen.height);
+      var shortSide = Math.min(screen.width, screen.height);
+      shell.style.bottom = "auto";
+      shell.style.height = (portrait ? longSide : shortSide) + "px";
     }
 
-    window.addEventListener("resize", fit);
-    window.addEventListener("orientationchange", fit);
+    function fit() {
+      sizeShell();
+      var ratio = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.style.width = "";
+      canvas.style.height = "";
+      canvas.width = Math.floor(frame.clientWidth * ratio);
+      canvas.height = Math.floor(frame.clientHeight * ratio);
+    }
+
+    // iOS settles its viewport a moment after a rotation or a cold start.
+    function refit() { fit(); setTimeout(fit, 300); }
+    window.addEventListener("resize", refit);
+    window.addEventListener("orientationchange", refit);
+    if (window.visualViewport) window.visualViewport.addEventListener("resize", refit);
+    window.addEventListener("load", refit);
     fit();
 
     // The game's HUD is laid out on a 1920x1080 canvas scaled by the geometric
@@ -203,11 +233,12 @@
     // keeps the goal clear of this corner (CameraFramer.reservedBottomUnits).
     var corner = document.querySelector(".corner");
     function placeCorner() {
-      var scale = Math.sqrt((window.innerWidth / 1920) * (window.innerHeight / 1080));
+      var scale = Math.sqrt((frame.clientWidth / 1920) * (frame.clientHeight / 1080));
       corner.style.bottom = Math.round((24 + 130 + 16) * scale) + "px";
       corner.style.right = Math.round(24 * scale) + "px";
     }
-    window.addEventListener("resize", placeCorner);
+    window.addEventListener("resize", function () { placeCorner(); setTimeout(placeCorner, 300); });
+    window.addEventListener("orientationchange", function () { setTimeout(placeCorner, 300); });
     placeCorner();
 
     function showError(message) {

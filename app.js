@@ -21,6 +21,20 @@
     document.documentElement.classList.add('standalone');
   }
 
+  // Installed on an iPhone, iOS reports a viewport that is short by the status
+  // bar while drawing the page from the top of the screen, which leaves a white
+  // band at the bottom. Stretch the page to the real screen height there.
+  if (navigator.standalone === true) {
+    var fillScreen = function () {
+      var portrait = window.matchMedia('(orientation: portrait)').matches;
+      var height = portrait ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
+      document.body.style.minHeight = height + 'px';
+    };
+    fillScreen();
+    window.addEventListener('orientationchange', function () { setTimeout(fillScreen, 300); });
+    window.addEventListener('resize', fillScreen);
+  }
+
   // Stadium sound for the web games. Clips are CC0 / public-domain recordings
   // (see sounds/CREDITS.md); the ball kick is synthesised. A page opts in by
   // calling sfx.bindToggle(), which loads the clips straight away; iOS only lets
