@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using Dribble;
+using MaccabiShared;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -30,7 +31,6 @@ namespace Dribble.EditorTools
         public const int StarPool = 36;
 
         static readonly Color PitchGreen = new Color(0.09f, 0.28f, 0.13f);
-        static readonly Color Chalk = new Color(0.95f, 0.95f, 0.92f);
         // Maccabi Netanya play in yellow and black; the defenders wear red and white
         // so a child can tell friend from foe at a glance.
         static readonly Color KitYellow = new Color(0.98f, 0.82f, 0.09f);
@@ -40,7 +40,6 @@ namespace Dribble.EditorTools
         static readonly Color ConeOrange = new Color(1f, 0.45f, 0.05f);
         static readonly Color StarGold = new Color(1f, 0.80f, 0.15f);
         static readonly Color Skin = new Color(0.85f, 0.70f, 0.55f);
-        static readonly Color Gold = new Color(0.91f, 0.71f, 0.30f);
         // A floodlit evening: the far end of the pitch fades into the night sky.
         static readonly Color Sky = new Color(0.06f, 0.13f, 0.25f);
 
@@ -417,6 +416,7 @@ namespace Dribble.EditorTools
         static HudController BuildHud()
         {
             var font = BuiltinFont();
+            UiKit.Build();
 
             var canvasObject = new GameObject("HUD");
             var canvas = canvasObject.AddComponent<Canvas>();
@@ -431,155 +431,265 @@ namespace Dribble.EditorTools
             eventSystem.AddComponent<EventSystem>();
             eventSystem.AddComponent<StandaloneInputModule>();
 
-            // --- stats bar (top) -------------------------------------------------
-            // Across the top, where it covers only the far end of the pitch; the
-            // bottom of the screen is the runner's, and the page's buttons.
-            var bar = new GameObject("StatsBar", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-            bar.transform.SetParent(canvasObject.transform, false);
-            var barRect = bar.GetComponent<RectTransform>();
-            barRect.anchorMin = new Vector2(0f, 1f);
-            barRect.anchorMax = new Vector2(1f, 1f);
-            barRect.pivot = new Vector2(0.5f, 1f);
-            barRect.offsetMin = new Vector2(16f, -16f - 104f);
-            barRect.offsetMax = new Vector2(-16f, -16f);
-            bar.GetComponent<Image>().color = new Color(0.05f, 0.11f, 0.17f, 0.82f);
-            bar.GetComponent<Image>().raycastTarget = false;
+            // --- counters (top) ---------------------------------------------------
+            // Three pills across the top, where they cover only the far end of the
+            // pitch; the bottom of the screen is the runner's, and the page's
+            // buttons. Score leads on the right, as Hebrew reads.
+            var counters = new GameObject("Counters", typeof(RectTransform)).GetComponent<RectTransform>();
+            counters.SetParent(canvasObject.transform, false);
+            counters.anchorMin = counters.anchorMax = new Vector2(0.5f, 1f);
+            counters.pivot = new Vector2(0.5f, 1f);
+            counters.sizeDelta = new Vector2(700f, 80f);
 
-            string[] captions = { "SCORE", "DISTANCE", "STARS", "BEST" };
-            var values = new Text[captions.Length];
-            for (int i = 0; i < captions.Length; i++)
-            {
-                var column = new GameObject(captions[i], typeof(RectTransform));
-                column.transform.SetParent(bar.transform, false);
-                var columnRect = column.GetComponent<RectTransform>();
-                columnRect.anchorMin = new Vector2(i / (float)captions.Length, 0f);
-                columnRect.anchorMax = new Vector2((i + 1) / (float)captions.Length, 1f);
-                columnRect.offsetMin = Vector2.zero;
-                columnRect.offsetMax = Vector2.zero;
-
-                var caption = Stretch(Label(column.transform, "Caption", captions[i], font, 22,
-                    new Color(0.86f, 0.88f, 0.86f, 0.75f), TextAnchor.MiddleCenter), 0.62f, 0.95f);
-                _ = caption;
-
-                bool isStars = i == 2;
-                var value = Stretch(Label(column.transform, "Value", "0", font, 46,
-                    i == 0 ? Gold : Chalk, TextAnchor.MiddleCenter), 0.04f, 0.66f);
-                value.fontStyle = FontStyle.Bold;
-                values[i] = value;
-
-                if (isStars)
-                {
-                    // A little star beside the count, the same gold as the ones on the pitch.
-                    value.alignment = TextAnchor.MiddleLeft;
-                    var valueRect = value.rectTransform;
-                    valueRect.anchorMin = new Vector2(0.5f, valueRect.anchorMin.y);
-                    valueRect.offsetMin = new Vector2(-2f, valueRect.offsetMin.y);
-
-                    var icon = new GameObject("StarIcon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-                    icon.transform.SetParent(column.transform, false);
-                    var iconRect = icon.GetComponent<RectTransform>();
-                    iconRect.anchorMin = iconRect.anchorMax = new Vector2(0.5f, 0.35f);
-                    iconRect.pivot = new Vector2(1f, 0.5f);
-                    iconRect.sizeDelta = new Vector2(44f, 44f);
-                    iconRect.anchoredPosition = new Vector2(-8f, 0f);
-                    var image = icon.GetComponent<Image>();
-                    image.sprite = StarSprite();
-                    image.preserveAspect = true;
-                    image.raycastTarget = false;
-                }
-            }
+            var scoreValue = Counter(counters, "Score", UiKit.IconTrophy, UiKit.Gold400, font);
+            var distanceValue = Counter(counters, "Distance", UiKit.IconBall, UiKit.Cream, font);
+            var starsValue = Counter(counters, "Stars", UiKit.StarFilled, UiKit.Cream, font);
 
             // --- toast and hint ----------------------------------------------
-            var toast = Label(canvasObject.transform, "Toast", "", font, 72, Gold, TextAnchor.MiddleCenter);
-            Centre(toast.rectTransform, new Vector2(0.5f, 0.66f), Vector2.zero, new Vector2(1000f, 110f));
-            toast.fontStyle = FontStyle.Bold;
-            var toastOutline = toast.gameObject.AddComponent<Outline>();
-            toastOutline.effectColor = new Color(0.03f, 0.07f, 0.12f, 0.85f);
-            toastOutline.effectDistance = new Vector2(3f, -3f);
+            var toast = Label(canvasObject.transform, "Toast", "", font, 84, UiKit.Gold400, TextAnchor.MiddleCenter);
+            Centre(toast.rectTransform, new Vector2(0.5f, 0.64f), Vector2.zero, new Vector2(1000f, 120f));
+            TitleEffects(toast);
             toast.enabled = false;
 
-            var hint = Label(canvasObject.transform, "Hint", "", font, 30, Chalk, TextAnchor.MiddleCenter);
-            Centre(hint.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -175f), new Vector2(680f, 80f));
-            var hintShadow = hint.gameObject.AddComponent<Outline>();
-            hintShadow.effectColor = new Color(0.03f, 0.07f, 0.12f, 0.85f);
-            hintShadow.effectDistance = new Vector2(2f, -2f);
+            var hint = Label(canvasObject.transform, "Hint", "", font, 34, UiKit.Cream, TextAnchor.MiddleCenter);
+            Centre(hint.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -160f), new Vector2(680f, 60f));
+            var hintOutline = hint.gameObject.AddComponent<Outline>();
+            hintOutline.effectColor = new Color(UiKit.Navy900.r, UiKit.Navy900.g, UiKit.Navy900.b, 0.85f);
+            hintOutline.effectDistance = new Vector2(2f, -2f);
             hint.enabled = false;
 
-            // --- overlay -------------------------------------------------------
+            // --- overlay: a dim layer and a card that pops in -----------------
             var overlay = new GameObject("Overlay", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
             overlay.transform.SetParent(canvasObject.transform, false);
-            var overlayRect = overlay.GetComponent<RectTransform>();
-            overlayRect.anchorMin = Vector2.zero;
-            overlayRect.anchorMax = Vector2.one;
-            overlayRect.offsetMin = Vector2.zero;
-            overlayRect.offsetMax = Vector2.zero;
-            overlay.GetComponent<Image>().color = new Color(0.04f, 0.09f, 0.14f, 0.88f);
+            Fill(overlay.GetComponent<RectTransform>(), 0f, 0f);
+            var dim = overlay.GetComponent<Image>();
+            dim.color = new Color(UiKit.Navy900.r, UiKit.Navy900.g, UiKit.Navy900.b, 0.72f);
 
-            var title = Label(overlay.transform, "Title", "DRIBBLE", font, 96, Gold, TextAnchor.MiddleCenter);
-            title.fontStyle = FontStyle.Bold;
-            var titleOutline = title.gameObject.AddComponent<Outline>();
-            titleOutline.effectColor = new Color(0f, 0f, 0f, 0.6f);
-            titleOutline.effectDistance = new Vector2(3f, -3f);
+            var card = new GameObject("Card", typeof(RectTransform)).GetComponent<RectTransform>();
+            card.SetParent(overlay.transform, false);
 
-            var body = Label(overlay.transform, "Body", "", font, 28, Chalk * 0.92f, TextAnchor.MiddleCenter);
-            body.lineSpacing = 1.1f;
+            var shadow = SlicedImage(card, "Shadow", UiKit.PanelShadow, Color.white);
+            Fill(shadow.rectTransform, -14f, -6f);
+            shadow.raycastTarget = false;
+            var panel = SlicedImage(card, "Panel", UiKit.Panel, Color.white);
+            Fill(panel.rectTransform, 0f, 0f);
 
-            var tierCaption = Label(overlay.transform, "DifficultyCaption", "CHOOSE YOUR LEVEL",
-                font, 24, new Color(0.86f, 0.88f, 0.86f, 0.65f), TextAnchor.MiddleCenter);
+            var title = Label(card, "Title", Rtl.Fix("כדרור!"), font, 108, UiKit.Gold400, TextAnchor.MiddleCenter);
+            TitleEffects(title);
 
-            var tierButtons = new Button[Tiers.Names.Length];
-            var tierBackgrounds = new Image[Tiers.Names.Length];
-            var tierLabels = new Text[Tiers.Names.Length];
-            var tierHints = new Text[Tiers.Names.Length];
+            // A red "new best" badge riding the top edge of the card.
+            var badgeImage = SlicedImage(card, "NewBestBadge", UiKit.Pill, UiKit.Red400);
+            var badgeRect = badgeImage.rectTransform;
+            badgeRect.anchorMin = badgeRect.anchorMax = new Vector2(0.5f, 1f);
+            badgeRect.pivot = new Vector2(0.5f, 0.5f);
+            badgeRect.sizeDelta = new Vector2(250f, 62f);
+            badgeRect.anchoredPosition = Vector2.zero;
+            var badgeText = Label(badgeImage.transform, "Label", Rtl.Fix("שיא חדש!"), font, 32, UiKit.Cream, TextAnchor.MiddleCenter);
+            Fill(badgeText.rectTransform, 0f, 0f);
+            badgeImage.gameObject.SetActive(false);
 
-            for (int i = 0; i < Tiers.Names.Length; i++)
+            // Three star slots; the earned ones fill in on the end card.
+            var starRow = new GameObject("StarRow", typeof(RectTransform)).GetComponent<RectTransform>();
+            starRow.SetParent(card, false);
+            var starFills = new Image[3];
+            for (int i = 0; i < 3; i++)
             {
-                var tierObject = new GameObject($"Difficulty{Tiers.Names[i]}",
-                    typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
-                tierObject.transform.SetParent(overlay.transform, false);
+                var slot = SimpleImage(starRow, $"Slot_{i}", UiKit.StarSlot);
+                slot.rectTransform.sizeDelta = new Vector2(120f, 120f);
+                var fill = SimpleImage(slot.transform, "Fill", UiKit.StarFilled);
+                Fill(fill.rectTransform, 0f, 0f);
+                fill.enabled = false;
+                starFills[i] = fill;
+            }
+            starRow.gameObject.SetActive(false);
 
-                var tierImage = tierObject.GetComponent<Image>();
-                tierImage.color = new Color(0.10f, 0.20f, 0.28f);
-                var tierButton = tierObject.GetComponent<Button>();
-                tierButton.targetGraphic = tierImage;
+            var body = Label(card, "Body", "", font, 34, UiKit.Cream, TextAnchor.MiddleCenter);
+            body.lineSpacing = 1.05f;
 
-                var tierLabel = Stretch(Label(tierObject.transform, "Label", Tiers.Names[i], font, 38,
-                    new Color(0.86f, 0.88f, 0.86f), TextAnchor.MiddleCenter), 0.40f, 0.95f);
-                tierLabel.fontStyle = FontStyle.Bold;
+            var caption = Label(card, "LevelCaption", Rtl.Fix("בחר רמה"), font, 32,
+                new Color(UiKit.Cream.r, UiKit.Cream.g, UiKit.Cream.b, 0.75f), TextAnchor.MiddleCenter);
 
-                var tierHint = Stretch(Label(tierObject.transform, "Hint", Tiers.Hints[i], font, 24,
-                    new Color(0.86f, 0.88f, 0.86f, 0.75f), TextAnchor.MiddleCenter), 0.08f, 0.42f);
+            int levels = Tiers.All.Length;
+            var tierButtons = new Button[levels];
+            var tierFaces = new Image[levels];
+            var tierEdges = new Image[levels];
+            var tierLabels = new Text[levels];
+            var tierHints = new Text[levels];
+
+            for (int i = 0; i < levels; i++)
+            {
+                var (tierButton, face, edge) = GameButton(card, $"Level{Tiers.Ids[i]}", UiKit.NavyFace, UiKit.NavyEdge);
+                var label = Label(face.transform, "Label", Rtl.Fix(Tiers.Names[i]), font, 40, UiKit.Cream, TextAnchor.MiddleCenter);
+                Stretch(label, 0.42f, 0.98f);
+                var levelHint = Label(face.transform, "Hint", Rtl.Fix(Tiers.Hints[i]), font, 28, UiKit.Cream, TextAnchor.MiddleCenter);
+                Stretch(levelHint, 0.06f, 0.46f);
 
                 tierButtons[i] = tierButton;
-                tierBackgrounds[i] = tierImage;
-                tierLabels[i] = tierLabel;
-                tierHints[i] = tierHint;
+                tierFaces[i] = face;
+                tierEdges[i] = edge;
+                tierLabels[i] = label;
+                tierHints[i] = levelHint;
             }
 
-            var buttonObject = new GameObject("StartButton", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
-            buttonObject.transform.SetParent(overlay.transform, false);
-            var buttonImage = buttonObject.GetComponent<Image>();
-            buttonImage.color = Gold;
-            var button = buttonObject.GetComponent<Button>();
-            button.targetGraphic = buttonImage;
-
-            var buttonLabel = Stretch(Label(buttonObject.transform, "Label", "Kick Off", font, 42,
-                new Color(0.05f, 0.11f, 0.17f), TextAnchor.MiddleCenter), 0f, 1f);
-            buttonLabel.fontStyle = FontStyle.Bold;
+            var (button, startFace, _) = GameButton(card, "StartButton", UiKit.GoldFace, UiKit.GoldEdge);
+            var buttonLabel = Label(startFace.transform, "Label", Rtl.Fix("בעיטת פתיחה!"), font, 46,
+                UiKit.Navy900, TextAnchor.MiddleCenter);
+            Fill(buttonLabel.rectTransform, 0f, 0f);
+            buttonLabel.rectTransform.anchoredPosition = new Vector2(0f, 2f);
 
             var hud = canvasObject.AddComponent<HudController>();
-            hud.Bind(scaler, values[0], values[1], values[2], values[3], toast, hint);
-            hud.BindStatsBar(barRect);
-            hud.BindOverlay(overlay, title, body, tierCaption.rectTransform, button, buttonLabel);
-            hud.BindDifficulty(tierButtons, tierBackgrounds, tierLabels, tierHints);
+            var wiring = new SerializedObject(hud);
+            Wire(wiring, "scaler", scaler);
+            Wire(wiring, "counters", counters);
+            Wire(wiring, "scoreText", scoreValue);
+            Wire(wiring, "distanceText", distanceValue);
+            Wire(wiring, "starsText", starsValue);
+            Wire(wiring, "toastText", toast);
+            Wire(wiring, "hintText", hint);
+            Wire(wiring, "overlay", overlay);
+            Wire(wiring, "dim", dim);
+            Wire(wiring, "card", card);
+            Wire(wiring, "titleText", title);
+            Wire(wiring, "badge", badgeImage.gameObject);
+            Wire(wiring, "starRow", starRow);
+            Wire(wiring, "starFills", starFills);
+            Wire(wiring, "bodyText", body);
+            Wire(wiring, "captionText", caption);
+            Wire(wiring, "startButton", button);
+            Wire(wiring, "startButtonLabel", buttonLabel);
+            Wire(wiring, "difficultyButtons", tierButtons);
+            Wire(wiring, "difficultyFaces", tierFaces);
+            Wire(wiring, "difficultyEdges", tierEdges);
+            Wire(wiring, "difficultyLabels", tierLabels);
+            Wire(wiring, "difficultyHints", tierHints);
+            Wire(wiring, "pickedFace", UiKit.GoldFace);
+            Wire(wiring, "pickedEdge", UiKit.GoldEdge);
+            Wire(wiring, "restingFace", UiKit.NavyFace);
+            Wire(wiring, "restingEdge", UiKit.NavyEdge);
+            wiring.ApplyModifiedPropertiesWithoutUndo();
+
+            hud.HighlightDifficulty(0);
             hud.Layout(false);
             EditorUtility.SetDirty(hud);
-
             return hud;
         }
 
         // ---------------------------------------------------------------- ui helpers
 
+        static void Wire(SerializedObject target, string field, Object value)
+        {
+            var property = target.FindProperty(field);
+            if (property == null) { Debug.LogError($"[Dribble] HUD has no field '{field}'."); return; }
+            property.objectReferenceValue = value;
+        }
+
+        static void Wire(SerializedObject target, string field, Object[] values)
+        {
+            var property = target.FindProperty(field);
+            if (property == null) { Debug.LogError($"[Dribble] HUD has no field '{field}'."); return; }
+            property.arraySize = values.Length;
+            for (int i = 0; i < values.Length; i++)
+                property.GetArrayElementAtIndex(i).objectReferenceValue = values[i];
+        }
+
+        /// <summary>
+        /// A chunky game button: a darker lower edge sitting a few pixels below the
+        /// face, so it reads as 3D, and press feedback on the root that scales both.
+        /// </summary>
+        static (Button button, Image face, Image edge) GameButton(Transform parent, string name, Sprite faceSprite, Sprite edgeSprite)
+        {
+            var root = new GameObject(name, typeof(RectTransform), typeof(Button), typeof(PressFeedback));
+            root.transform.SetParent(parent, false);
+
+            var edge = SlicedImage(root.transform, "Edge", edgeSprite, Color.white);
+            Fill(edge.rectTransform, 0f, 0f);
+            edge.rectTransform.offsetMin = new Vector2(0f, -6f);
+            edge.rectTransform.offsetMax = new Vector2(0f, -6f);
+            edge.raycastTarget = false;
+
+            var face = SlicedImage(root.transform, "Face", faceSprite, Color.white);
+            Fill(face.rectTransform, 0f, 0f);
+
+            var button = root.GetComponent<Button>();
+            button.targetGraphic = face;
+            // The press is shown by PressFeedback's squash, not a colour tint.
+            button.transition = Selectable.Transition.None;
+            return (button, face, edge);
+        }
+
+        /// <summary>A navy pill with its icon on the leading (right) side and a number beside it.</summary>
+        static Text Counter(RectTransform parent, string name, Sprite icon, Color ink, Font font)
+        {
+            var pill = SlicedImage(parent, name, UiKit.Pill,
+                new Color(UiKit.Navy700.r, UiKit.Navy700.g, UiKit.Navy700.b, 0.92f));
+            pill.raycastTarget = false;
+            var rect = pill.rectTransform;
+            rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 1f);
+            rect.pivot = new Vector2(0.5f, 1f);
+
+            var image = SimpleImage(pill.transform, "Icon", icon);
+            var iconRect = image.rectTransform;
+            iconRect.anchorMin = new Vector2(1f, 0.12f);
+            iconRect.anchorMax = new Vector2(1f, 0.88f);
+            iconRect.pivot = new Vector2(1f, 0.5f);
+            iconRect.sizeDelta = new Vector2(0f, 0f);
+            iconRect.anchoredPosition = new Vector2(-12f, 0f);
+            var fitter = image.gameObject.AddComponent<AspectRatioFitter>();
+            fitter.aspectMode = AspectRatioFitter.AspectMode.HeightControlsWidth;
+            fitter.aspectRatio = 1f;
+
+            var value = Label(pill.transform, "Value", "0", font, 40, ink, TextAnchor.MiddleCenter);
+            var valueRect = value.rectTransform;
+            valueRect.anchorMin = new Vector2(0f, 0f);
+            valueRect.anchorMax = new Vector2(1f, 1f);
+            valueRect.offsetMin = new Vector2(10f, 0f);
+            valueRect.offsetMax = new Vector2(-62f, 2f);
+            return value;
+        }
+
+        /// <summary>Gold title look: a dark gold outline and a drop shadow beneath.</summary>
+        static void TitleEffects(Text text)
+        {
+            var outline = text.gameObject.AddComponent<Outline>();
+            outline.effectColor = UiKit.Gold900;
+            outline.effectDistance = new Vector2(3f, -3f);
+            var shadow = text.gameObject.AddComponent<Shadow>();
+            shadow.effectColor = new Color(0f, 0f, 0f, 0.5f);
+            shadow.effectDistance = new Vector2(0f, -6f);
+        }
+
+        static Image SlicedImage(Transform parent, string name, Sprite sprite, Color colour)
+        {
+            var image = SimpleImage(parent, name, sprite);
+            image.type = Image.Type.Sliced;
+            image.color = colour;
+            return image;
+        }
+
+        static Image SimpleImage(Transform parent, string name, Sprite sprite)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            go.transform.SetParent(parent, false);
+            var image = go.GetComponent<Image>();
+            image.sprite = sprite;
+            image.preserveAspect = false;
+            return image;
+        }
+
+        /// <summary>Stretch to fill the parent, grown by <paramref name="grow"/> and nudged down by <paramref name="drop"/>.</summary>
+        static void Fill(RectTransform rect, float grow, float drop)
+        {
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.offsetMin = new Vector2(-grow, -grow + drop);
+            rect.offsetMax = new Vector2(grow, grow + drop);
+        }
+
+        /// <summary>
+        /// A Text that never wraps: Hebrew is wrapped and reordered by Rtl before
+        /// it gets here, and Unity's own wrapping would break it again.
+        /// </summary>
         static Text Label(Transform parent, string name, string content, Font font, int size,
             Color color, TextAnchor anchor)
         {
@@ -590,9 +700,10 @@ namespace Dribble.EditorTools
             text.text = content;
             text.font = font;
             text.fontSize = size;
+            text.fontStyle = FontStyle.Normal;
             text.color = color;
             text.alignment = anchor;
-            text.horizontalOverflow = HorizontalWrapMode.Wrap;
+            text.horizontalOverflow = HorizontalWrapMode.Overflow;
             text.verticalOverflow = VerticalWrapMode.Overflow;
             text.raycastTarget = false;
 
@@ -852,46 +963,6 @@ namespace Dribble.EditorTools
                 if (torso) return shirt;
                 return terrace;
             });
-        }
-
-        /// <summary>The HUD's star icon, matching the stars on the pitch.</summary>
-        static Sprite StarSprite()
-        {
-            const int size = 64;
-            var outline = new Vector2[10];
-            for (int i = 0; i < 10; i++)
-            {
-                float a = Mathf.PI / 2f + i * Mathf.PI / 5f;
-                float r = i % 2 == 0 ? 30f : 13.5f;
-                outline[i] = new Vector2(32f + Mathf.Cos(a) * r, 31f + Mathf.Sin(a) * r);
-            }
-
-            var texture = SaveTexture("StarIcon", size, size, TextureWrapMode.Clamp, (x, y, random) =>
-            {
-                // Four samples per pixel for a soft edge.
-                int inside = 0;
-                for (int s = 0; s < 4; s++)
-                {
-                    var p = new Vector2(x + 0.25f + (s % 2) * 0.5f, y + 0.25f + (s / 2) * 0.5f);
-                    if (InPolygon(p, outline)) inside++;
-                }
-                return new Color(1f, 0.80f, 0.15f, inside / 4f);
-            }, alpha: true, sprite: true);
-
-            string path = AssetDatabase.GetAssetPath(texture);
-            return AssetDatabase.LoadAssetAtPath<Sprite>(path);
-        }
-
-        static bool InPolygon(Vector2 p, Vector2[] polygon)
-        {
-            bool inside = false;
-            for (int i = 0, j = polygon.Length - 1; i < polygon.Length; j = i++)
-            {
-                if ((polygon[i].y > p.y) != (polygon[j].y > p.y) &&
-                    p.x < (polygon[j].x - polygon[i].x) * (p.y - polygon[i].y) / (polygon[j].y - polygon[i].y) + polygon[i].x)
-                    inside = !inside;
-            }
-            return inside;
         }
 
         /// <summary>

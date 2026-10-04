@@ -153,8 +153,13 @@
       listeners.forEach(function (fn) { fn(muted); });
     }
 
+    // Sized and stroked inline so the icon also renders on pages without the
+    // shared stylesheet.
+    var SOUND_ON = '<svg class="icon" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>';
+    var SOUND_OFF = '<svg class="icon" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path d="M16.5 9.5l5 5M21.5 9.5l-5 5"/></svg>';
+
     function render(btn) {
-      btn.textContent = muted ? '🔇' : '🔊';
+      btn.innerHTML = muted ? SOUND_OFF : SOUND_ON;
       btn.setAttribute('aria-label', muted ? 'הפעל צלילים' : 'השתק צלילים');
       btn.setAttribute('aria-pressed', String(!muted));
     }

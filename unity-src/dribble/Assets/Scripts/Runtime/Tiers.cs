@@ -42,9 +42,35 @@ namespace Dribble
             Difficulty.Starter, Difficulty.Easy, Difficulty.Medium, Difficulty.Hard
         };
 
-        public static readonly string[] Names = { "Starter", "Easy", "Medium", "Hard" };
+        /// <summary>English ids, for object names and the saved best scores.</summary>
+        public static readonly string[] Ids = { "Starter", "Easy", "Medium", "Hard" };
 
-        public static readonly string[] Hints = { "nice and slow", "a bit quicker", "busy pitch", "super fast" };
+        /// <summary>Button text, in logical Hebrew (run it through Rtl.Fix to display).</summary>
+        public static readonly string[] Names = { "מתחילים", "קל", "בינוני", "קשה" };
+
+        public static readonly string[] Hints = { "לאט ובנחת", "קצת יותר מהר", "מגרש עמוס", "סופר מהיר" };
+
+        /// <summary>
+        /// Scores for the second and third star at the end of a run; every finished
+        /// run earns the first. Set so a Starter child gets two stars for a decent
+        /// half-minute run and three for a long one, and Hard asks for a lot more.
+        /// </summary>
+        public static readonly int[,] StarScores =
+        {
+            { 150, 300 },   // Starter
+            { 200, 450 },   // Easy
+            { 300, 650 },   // Medium
+            { 400, 900 },   // Hard
+        };
+
+        /// <summary>1 to 3 stars for a run that scored <paramref name="score"/>.</summary>
+        public static int StarsFor(Difficulty difficulty, int score)
+        {
+            int row = (int)difficulty;
+            if (score >= StarScores[row, 1]) return 3;
+            if (score >= StarScores[row, 0]) return 2;
+            return 1;
+        }
 
         /// <summary>
         /// Starter is built for a six year old: a jog, one blocker at a time, and

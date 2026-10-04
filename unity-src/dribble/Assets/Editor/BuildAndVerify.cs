@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Dribble;
+using MaccabiShared;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -24,11 +25,13 @@ namespace Dribble.EditorTools
         {
             int failures = 0;
 
+            failures += CheckRtl();
             failures += CheckTiers();
             failures += CheckGenerator();
             failures += CheckSceneWiring();
             failures += CheckCourseSimulation();
             failures += CheckAudioAndPage();
+            failures += CheckPortalBridge();
 
             if (failures > 0)
             {
@@ -41,13 +44,89 @@ namespace Dribble.EditorTools
             if (Application.isBatchMode) EditorApplication.Exit(0);
         }
 
+        /// <summary>
+        /// Unity's Text cannot lay out Hebrew, so Rtl reorders it. Spot-check the
+        /// cases the game relies on: words reversed, numbers and sums kept the
+        /// right way round, and wrapped paragraphs keeping their first line on top.
+        /// </summary>
+        static int CheckRtl()
+        {
+            int failures = 0;
+            failures += Expect(Rtl.Fix("שאלה 3 מתוך 5"), "5 ךותמ 3 הלאש");
+            failures += Expect(Rtl.Fix("כמה זה 7 + 3?"), "?7 + 3 הז המכ");
+            failures += Expect(Rtl.Fix("100 מ'!"), "!'מ 100");
+            failures += Expect(Rtl.Fix("נקודות: 193, שיא: 210"), "210 :איש ,193 :תודוקנ");
+            failures += Expect(Rtl.Fix("Kick 42"), "Kick 42");
+
+            string wrapped = Rtl.Wrap("אחת שתיים שלוש ארבע", 10);
+            var lines = wrapped.Split('\n');
+            failures += Require(lines.Length == 2 && lines[0] == Rtl.Fix("אחת שתיים") && lines[1] == Rtl.Fix("שלוש ארבע"),
+                $"Rtl.Wrap put the lines in the wrong order: '{wrapped.Replace("\n", " | ")}'.");
+
+            // Every Hebrew string the game shows fits Fredoka's glyphs.
+            var font = AssetDatabase.LoadAssetAtPath<Font>("Assets/Fonts/Fredoka-SemiBold.ttf");
+            failures += Require(font != null, "Fredoka is missing from Assets/Fonts.");
+            if (font != null)
+            {
+                foreach (char c in "אבגדהוזחטיכךלמםנןסעפףצץקרשת")
+                    failures += Require(font.HasCharacter(c), $"Fredoka has no glyph for '{c}'.");
+            }
+
+            if (failures == 0) Debug.Log("[Verify] Rtl: OK.");
+            return failures;
+        }
+
+        static int Expect(string actual, string expected) =>
+            Require(actual == expected, $"Rtl gave '{actual}', expected '{expected}'.");
+
+        /// <summary>
+        /// The stars and bests reach the website: the WebGL plugin ships, and the
+        /// game calls each bridge entry point at the right moment.
+        /// </summary>
+        static int CheckPortalBridge()
+        {
+            int failures = 0;
+            const string plugin = "Assets/Plugins/WebGL/PortalBridge.jslib";
+            var importer = AssetImporter.GetAtPath(plugin) as PluginImporter;
+            failures += Require(importer != null && importer.GetCompatibleWithPlatform(BuildTarget.WebGL),
+                "PortalBridge.jslib is missing or not enabled for WebGL.");
+
+            string game = File.ReadAllText("Assets/Scripts/Runtime/DribbleGame.cs");
+            string feedback = File.ReadAllText("Assets/Scripts/Runtime/PressFeedback.cs");
+            failures += Require(game.Contains("PortalBridge.MarkPlayed(Slug)") && game.Contains("const string Slug = \"dribble\""),
+                "A run start does not mark dribble as played.");
+            failures += Require(game.Contains("PortalBridge.AddStars(earned)"), "Finished runs do not add stars.");
+            failures += Require(game.Contains("PortalBridge.ReportBest(Slug, score)"), "Finished runs do not report the best.");
+            failures += Require(feedback.Contains("PortalBridge.Haptic(10)"), "Button presses do not buzz.");
+
+            foreach (var difficulty in Tiers.All)
+            {
+                int last = 0;
+                for (int score = 0; score <= 2000; score += 5)
+                {
+                    int stars = Tiers.StarsFor(difficulty, score);
+                    if (stars < 1 || stars > 3 || stars < last)
+                    {
+                        failures += Require(false, $"{difficulty}: {stars} stars for {score} points.");
+                        break;
+                    }
+                    last = stars;
+                }
+                failures += Require(Tiers.StarsFor(difficulty, 0) == 1 && Tiers.StarsFor(difficulty, 5000) == 3,
+                    $"{difficulty}: star thresholds do not span 1 to 3.");
+            }
+
+            if (failures == 0) Debug.Log("[Verify] Portal bridge and star awards: OK.");
+            return failures;
+        }
+
         /// <summary>Each level is a step up from the one before, and Starter is gentle.</summary>
         static int CheckTiers()
         {
             int failures = 0;
             var all = Tiers.All.Select(Tiers.For).ToArray();
 
-            failures += Require(Tiers.Names.Length == Tiers.All.Length && Tiers.Hints.Length == Tiers.All.Length,
+            failures += Require(Tiers.Names.Length == Tiers.All.Length && Tiers.Hints.Length == Tiers.All.Length && Tiers.Ids.Length == Tiers.All.Length,
                 "Every level needs a name and a hint.");
 
             for (int i = 1; i < all.Length; i++)
@@ -226,10 +305,31 @@ namespace Dribble.EditorTools
                     "HUD does not have a button for every level.");
                 var texts = hud.GetComponentsInChildren<Text>(true);
                 failures += Require(texts.Length >= 15, $"HUD looks under-built ({texts.Length} text elements).");
-                failures += Require(texts.All(t => t.font != null), "A HUD text element has no font.");
+                foreach (var text in texts)
+                {
+                    failures += Require(text.font != null && text.font.name.Contains("Fredoka"),
+                        $"{text.name} does not use Fredoka (it has {(text.font != null ? text.font.name : "no font")}).");
+                    // Rtl wraps Hebrew itself; Unity's wrapping would undo it.
+                    failures += Require(text.horizontalOverflow == HorizontalWrapMode.Overflow,
+                        $"{text.name} wraps its own text.");
+                }
+
                 var hudObject = new SerializedObject(hud);
-                foreach (var field in new[] { "scaler", "statsBar", "scoreText", "distanceText", "starsText", "bestText", "toastText", "hintText", "overlay" })
+                foreach (var field in new[] { "scaler", "counters", "scoreText", "distanceText", "starsText", "toastText",
+                             "hintText", "overlay", "dim", "card", "titleText", "badge", "starRow", "bodyText", "captionText",
+                             "startButton", "startButtonLabel", "pickedFace", "pickedEdge", "restingFace", "restingEdge" })
                     failures += Require(hudObject.FindProperty(field).objectReferenceValue != null, $"HUD.{field} is not wired.");
+                var fills = hudObject.FindProperty("starFills");
+                failures += Require(fills.arraySize == 3, "The end card does not have 3 star slots.");
+
+                // Every button squashes, ticks and buzzes when pressed.
+                foreach (var button in hud.GetComponentsInChildren<Button>(true))
+                    failures += Require(button.GetComponent<PressFeedback>() != null, $"{button.name} has no PressFeedback.");
+
+                // Panels and buttons are 9-sliced rounded sprites.
+                foreach (var image in hud.GetComponentsInChildren<Image>(true).Where(i => i.type == Image.Type.Sliced))
+                    failures += Require(image.sprite != null && image.sprite.border != Vector4.zero,
+                        $"{image.name} is sliced but its sprite has no border.");
             }
             else
             {

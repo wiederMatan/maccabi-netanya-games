@@ -18,37 +18,49 @@
 </head>
 <body>
   <div id="portal">
-    <header>
-      <h1>⚽ משחקי מכבי נתניה</h1>
-      <p class="subtitle">למד להכיר את השחקנים ושחק!</p>
-      <div class="stars-display">⭐ <span id="total-stars">0</span> כוכבים</div>
+    <header class="topbar">
+      <div class="brand">
+        <img src="icons/icon-192.png" alt="">
+        <div>
+          <h1 class="title-outline">משחקי מכבי נתניה</h1>
+          <div class="subtitle">למד להכיר את השחקנים ושחק!</div>
+        </div>
+      </div>
+      <div class="pill" aria-label="כוכבים"><span class="star">★</span><span id="total-stars">0</span></div>
     </header>
 
+    <!-- Filled in by portal.js with the last game played. -->
+    <section id="continue-section" hidden>
+      <div class="section-title">המשך לשחק</div>
+      <a id="continue" class="continue panel" href="#">
+        <img id="continue-thumb" src="" alt="">
+        <div class="info">
+          <div class="label">שיחקת לאחרונה</div>
+          <div class="name" id="continue-name"></div>
+        </div>
+        <span class="btn">שחק<svg class="icon" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></span>
+      </a>
+    </section>
+
+    <div class="section-title">כל המשחקים</div>
     <div class="games-grid">
-      <a href="games/memory/index.html" class="game-card">
-        <div class="game-icon">🃏</div>
+      <a href="games/memory/index.html" class="game-card panel" data-slug="memory">
+        <img class="thumb" src="images/thumbs/memory.jpg" alt="">
         <div class="game-title">משחק זיכרון</div>
         <div class="game-desc">מצא את זוגות השחקנים!</div>
-        <div class="pups">4 רמות קושי</div>
       </a>
 
-      <a href="games/math-strikers/index.html" class="game-card">
-        <div class="game-icon">⚽</div>
+      <a href="games/math-strikers/index.html" class="game-card panel" data-slug="math-strikers">
+        <img class="thumb" src="images/thumbs/math-strikers.jpg" alt="">
         <div class="game-title">בועטים וחושבים</div>
         <div class="game-desc">פתור תרגיל ובעט לשער!</div>
-        <div class="pups">4 רמות קושי</div>
       </a>
 
-
-      <a href="games/dribble/index.html" class="game-card">
-        <div class="game-icon">🏃</div>
+      <a href="games/dribble/index.html" class="game-card panel" data-slug="dribble">
+        <img class="thumb" src="images/thumbs/dribble.jpg" alt="">
         <div class="game-title">כדרור</div>
-        <div class="game-desc">עקוף את המגינים ואסוף כוכבים!</div>
-        <div class="pups">4 רמות קושי</div>
+        <div class="game-desc">עקוף מגינים ואסוף כוכבים!</div>
       </a>
-
-
-
 
       <!-- Hidden for now; the games are still deployed. Move a card back above to show it again.
       <a href="games/keeper/index.html" class="game-card">

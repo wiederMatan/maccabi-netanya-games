@@ -48,13 +48,15 @@
       backface-visibility: hidden;
     }
     .card-back {
-      background: linear-gradient(135deg, #ffcc00, #e6b800);
-      border: 3px solid #b38f00;
+      background: radial-gradient(circle at 50% 35%, #ffe57a, var(--gold-400) 45%, var(--gold-600));
+      border: 3px solid var(--gold-900);
+      box-shadow: 0 4px 0 var(--gold-900), inset 0 2px 0 rgba(255, 255, 255, 0.5);
       font-size: 2em;
     }
     .card-front {
-      background: linear-gradient(135deg, #001a3d, #003087);
-      border: 3px solid #4a8ccc;
+      background: linear-gradient(180deg, var(--navy-700), var(--navy-800));
+      border: 3px solid var(--gold-400);
+      box-shadow: 0 4px 0 var(--gold-900);
       transform: rotateY(180deg);
       padding: 5px;
     }
@@ -67,7 +69,7 @@
     .card-front .pup-name {
       font-size: 0.68em;
       font-weight: bold;
-      color: #ffe08a;
+      color: var(--gold-400);
       margin-top: 3px;
       text-align: center;
       line-height: 1.15;
@@ -83,10 +85,10 @@
     @media (max-height: 500px) and (orientation: landscape) {
       body.playing .game-title-bar { display: none; }
       body.playing .game-container { padding-bottom: max(4px, env(safe-area-inset-bottom)); }
-      body.playing .back-btn { position: absolute; margin: 0; min-height: 38px;
-        top: max(8px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); }
-      body.playing .score-bar { margin: 2px 0 8px; padding: 0 130px 0 0; justify-content: flex-start; }
-      body.playing .score-item { padding: 6px 12px; }
+      body.playing .game-topbar { position: absolute; inset: max(8px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) auto max(12px, env(safe-area-inset-left)); margin: 0; pointer-events: none; }
+      body.playing .game-topbar > * { pointer-events: auto; }
+      body.playing .score-bar { margin: 2px 60px 8px; }
+      body.playing .score-item { padding: 4px 12px; }
       body.playing .btn { min-height: 40px; padding: 8px 18px; margin: 4px; }
     }
     @media (max-width: 520px) {
@@ -99,28 +101,30 @@
 </head>
 <body>
   <div class="game-container">
-    <a href="../../index.html" class="back-btn">← חזור לפורטל</a>
-    <button class="sound-toggle" id="sound-toggle" type="button"></button>
-    <div class="game-title-bar">🃏 משחק זיכרון</div>
+    <div class="game-topbar">
+      <a href="../../index.html" class="icon-btn" aria-label="חזרה לפורטל"><svg class="icon" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></a>
+      <div class="game-title-bar title-outline">משחק זיכרון</div>
+      <button class="icon-btn sound-toggle" id="sound-toggle" type="button"></button>
+    </div>
 
     <div class="level-select" id="level-select">
       <button class="level-btn" onclick="startGame('easy')">
-        <div class="level-icon">⭐</div>
+        <div class="level-icon">★</div>
         <div class="level-name">קל</div>
         <div class="level-desc">6 זוגות</div>
       </button>
       <button class="level-btn" onclick="startGame('medium')">
-        <div class="level-icon">⭐⭐</div>
+        <div class="level-icon">★★</div>
         <div class="level-name">בינוני</div>
         <div class="level-desc">9 זוגות</div>
       </button>
       <button class="level-btn" onclick="startGame('hard')">
-        <div class="level-icon">⭐⭐⭐</div>
+        <div class="level-icon">★★★</div>
         <div class="level-name">קשה</div>
         <div class="level-desc">12 זוגות</div>
       </button>
       <button class="level-btn" onclick="startGame('expert')">
-        <div class="level-icon">⭐⭐⭐⭐</div>
+        <div class="level-icon">★★★★</div>
         <div class="level-name">מומחה</div>
         <div class="level-desc">16 זוגות</div>
       </button>
@@ -128,14 +132,17 @@
 
     <div id="game-area" style="display:none;">
       <div class="score-bar">
-        <div class="score-item">רמה: <strong id="level-label"></strong></div>
-        <div class="score-item">ניסיונות: <strong id="attempts">0</strong></div>
-        <div class="score-item">זוגות: <strong id="matched">0</strong> / <span id="total-pairs">0</span></div>
+        <div class="score-item pill">רמה: <strong id="level-label"></strong></div>
+        <div class="score-item pill">ניסיונות: <strong id="attempts">0</strong></div>
+        <div class="score-item pill">זוגות: <span dir="ltr"><strong id="matched">0</strong> / <span id="total-pairs">0</span></span></div>
       </div>
       <div class="memory-grid" id="grid"></div>
       <div class="win-message" id="win-msg" role="dialog" aria-modal="true">
-        <div class="win-sheet">
-          🎉 כל הכבוד! מצאת את כל הזוגות!<br>⭐ קיבלת כוכב!<br><br>
+        <div class="win-sheet panel">
+          <div class="win-title title-outline">כל הכבוד!</div>
+          <div class="win-text">מצאת את כל הזוגות ב־<span id="win-attempts"></span> ניסיונות</div>
+          <div class="star-row" id="win-stars"><span>★</span><span>★</span><span>★</span></div>
+          <div class="win-text" id="win-earned"></div>
           <button class="btn btn-primary" onclick="startGame(currentLevel)">שחק שוב</button>
           <button class="btn btn-secondary" onclick="showLevelSelect()">בחר רמה אחרת</button>
         </div>
@@ -204,6 +211,10 @@
       document.getElementById('level-select').style.display = 'none';
       document.getElementById('game-area').style.display = 'block';
       document.body.classList.add('playing');
+      try {
+        localStorage.setItem('maccabi-netanya-played-memory', '1');
+        localStorage.setItem('maccabi-netanya-last', 'memory');
+      } catch (e) {}
       sfx.crowd(true);
       sfx.whistle();
       document.getElementById('level-label').textContent = cfg.label;
@@ -295,7 +306,7 @@
           sfx.finalWhistle();
           setTimeout(sfx.applause, 900);
           setTimeout(() => sfx.crowd(false), 1500);
-          addStar();
+          awardStars();
         } else {
           haptic(35);
           sfx.cheer();
@@ -309,8 +320,16 @@
       flipped = []; locked = false;
     }
 
-    function addStar() {
-      localStorage.setItem('maccabi-netanya-stars', parseInt(localStorage.getItem('maccabi-netanya-stars') || '0') + 1);
+    // 3 stars for a sharp memory, 2 for a good one, 1 for finishing.
+    function awardStars() {
+      const earned = attempts <= totalPairs * 1.5 ? 3 : attempts <= totalPairs * 2.2 ? 2 : 1;
+      document.getElementById('win-attempts').textContent = attempts;
+      document.querySelectorAll('#win-stars span').forEach((star, i) => star.classList.toggle('on', i < earned));
+      document.getElementById('win-earned').textContent = earned === 1 ? 'קיבלת כוכב!' : `קיבלת ${earned} כוכבים!`;
+      try {
+        const total = parseInt(localStorage.getItem('maccabi-netanya-stars') || '0', 10) + earned;
+        localStorage.setItem('maccabi-netanya-stars', total);
+      } catch (e) {}
     }
   </script>
 </body>

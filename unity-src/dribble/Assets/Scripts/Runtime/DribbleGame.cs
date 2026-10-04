@@ -1,4 +1,5 @@
 using System.Collections;
+using MaccabiShared;
 using UnityEngine;
 
 namespace Dribble
@@ -8,9 +9,14 @@ namespace Dribble
     /// stars and ends when a defender wins the ball. Cones are forgiving: knocking
     /// one over only costs some speed. Everything else in the scene reacts to this
     /// class.
+    ///
+    /// Progress is shared with the website through PortalBridge: the game is
+    /// marked played when a run starts, and each finished run adds 1-3 stars to
+    /// the portal's total (Tiers.StarScores) and reports the score as a best.
     /// </summary>
     public class DribbleGame : MonoBehaviour
     {
+        public const string Slug = "dribble";
         public const int StarPoints = 10;
         const int MilestoneMetres = 100;
         // A blocker is hit when it reaches the ball out in front, or the runner's
@@ -48,6 +54,8 @@ namespace Dribble
         float lastStarTime;
         int nextMilestone;
         bool steered;
+        int bestAtStart;
+        bool bestCalled;
         int laneChanges;
         int conesHit;
 
@@ -72,6 +80,7 @@ namespace Dribble
             if (audio_ == null) audio_ = FindFirstObjectByType<DribbleAudio>();
             if (framer != null && runner != null) framer.Target = runner.Body;
             if (runner != null) runner.Touched += () => audio_?.PlayTouch();
+            if (hud != null) hud.StarRevealed += i => audio_?.PlayStar(i);
 
             if (hud != null)
             {
@@ -91,12 +100,11 @@ namespace Dribble
                 hud.SetScore(0);
                 hud.SetDistance(0);
                 hud.SetStars(0);
-                hud.SetBest(Best(difficulty));
-                hud.ShowOverlay(
-                    "DRIBBLE",
-                    "Run down the pitch with the ball! Swipe or tap left and right to dodge " +
-                    "the defenders, and grab the gold stars.",
-                    "Kick Off");
+                hud.ShowMenu(
+                    "כדרור!",
+                    "רוץ עם הכדור לאורך המגרש! החלק או הקש ימינה ושמאלה " +
+                    "כדי לעקוף את המגינים, ואסוף כוכבים.",
+                    "בעיטת פתיחה!");
             }
 
             tier = Tiers.For(difficulty);
@@ -141,9 +149,17 @@ namespace Dribble
 
             if (distance >= nextMilestone)
             {
-                hud?.Toast($"{nextMilestone} m!");
+                hud?.Toast($"{nextMilestone} מ'!");
                 audio_?.PlayMilestone();
                 nextMilestone += MilestoneMetres;
+            }
+
+            // Passing the old best mid-run deserves a shout.
+            if (!bestCalled && bestAtStart > 0 && Score > bestAtStart)
+            {
+                bestCalled = true;
+                hud?.Toast("שיא חדש!");
+                audio_?.PlayMilestone();
             }
 
             hud?.SetDistance(Mathf.FloorToInt(distance));
@@ -196,7 +212,7 @@ namespace Dribble
             speedPenalty = Mathf.Max(speedPenalty, speed * ConeSlowdown);
             conesHit++;
             audio_?.PlayCone();
-            hud?.Toast("Watch the cones!", 1f);
+            hud?.Toast("זהירות, קונוס!", 1f);
         }
 
         void Tackled(PitchItem defender)
@@ -218,22 +234,26 @@ namespace Dribble
                 PlayerPrefs.Save();
             }
 
+            // Recorded straight away, so leaving during the replay loses nothing.
+            int earned = Tiers.StarsFor(difficulty, score);
+            PortalBridge.AddStars(earned);
+            PortalBridge.ReportBest(Slug, score);
+
             audio_?.PlayTackle(newBest);
-            hud?.Toast("OHHH!", 1.2f);
-            StartCoroutine(ShowEnd(score, newBest));
+            hud?.Toast("אוי!", 1.2f);
+            StartCoroutine(ShowEnd(score, earned, newBest));
         }
 
-        IEnumerator ShowEnd(int score, bool newBest)
+        IEnumerator ShowEnd(int score, int earned, bool newBest)
         {
             yield return new WaitForSeconds(EndOverlayDelay);
 
             int metres = Mathf.FloorToInt(distance);
-            hud?.SetBest(Best(difficulty));
-            hud?.ShowOverlay(
-                newBest ? "NEW BEST!" : "TACKLED!",
-                $"You dribbled {metres} m and grabbed {stars} star{(stars == 1 ? "" : "s")}.\n" +
-                $"Score {score}" + (newBest ? " - your best ever!" : $"  (best {Best(difficulty)})"),
-                "Play Again");
+            string title = earned == 3 ? "מדהים!" : earned == 2 ? "כל הכבוד!" : "יפה מאוד!";
+            string collected = stars == 0 ? "ולא אספת כוכבים" : stars == 1 ? "ואספת כוכב אחד" : $"ואספת {stars} כוכבים";
+            hud?.ShowEnd(title,
+                $"כדררת {metres}\u00A0מ' {collected}.\nנקודות: {score}, שיא: {Best(difficulty)}",
+                "שחק שוב", earned, newBest);
         }
 
         /// <summary>Overlay level picker. Takes effect from the next run.</summary>
@@ -242,7 +262,6 @@ namespace Dribble
             if (index < 0 || index >= Tiers.All.Length) return;
             difficulty = Tiers.All[index];
             hud?.HighlightDifficulty(index);
-            hud?.SetBest(Best(difficulty));
         }
 
         public void StartRun()
@@ -272,8 +291,10 @@ namespace Dribble
             hud?.SetScore(0);
             hud?.SetDistance(0);
             hud?.SetStars(0);
-            hud?.SetBest(Best(difficulty));
-            hud?.ShowHint("Swipe or tap left / right to dodge", 6f);
+            hud?.ShowHint("החלק או הקש ימינה ושמאלה", 6f);
+            bestAtStart = Best(difficulty);
+            bestCalled = false;
+            PortalBridge.MarkPlayed(Slug);
             audio_?.PlayKickOff();
         }
 

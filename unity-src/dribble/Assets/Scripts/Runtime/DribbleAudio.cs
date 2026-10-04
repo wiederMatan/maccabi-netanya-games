@@ -22,6 +22,7 @@ namespace Dribble
         Coroutine crowdRamp;
 
         AudioClip chime;
+        AudioClip tick;
         AudioClip knock;
         AudioClip swoosh;
         AudioClip touch;
@@ -31,13 +32,23 @@ namespace Dribble
         AudioClip whistle;
         AudioClip applause;
 
+        /// <summary>The scene's audio, for the button press feedback.</summary>
+        public static DribbleAudio Instance { get; private set; }
+
+        void OnDestroy()
+        {
+            if (Instance == this) Instance = null;
+        }
+
         void Awake()
         {
+            Instance = this;
             source = GetComponent<AudioSource>();
             source.playOnAwake = false;
             source.spatialBlend = 0f;
 
             chime = BuildChime();
+            tick = BuildTick();
             knock = BuildKnock();
             swoosh = BuildSwoosh();
             touch = BuildTouch();
@@ -72,6 +83,8 @@ namespace Dribble
         }
 
         public void PlayCone() => Play(knock, 0.75f);
+        /// <summary>A button press.</summary>
+        public void PlayTick() => Play(tick, 0.5f);
         public void PlayLaneChange() => Play(swoosh, 0.22f);
         public void PlayTouch() => Play(touch, 0.28f);
 
@@ -203,6 +216,16 @@ namespace Dribble
                 float tone = Mathf.Sin(2f * Mathf.PI * frequency * t)
                            + 0.3f * Mathf.Sin(4f * Mathf.PI * frequency * t);
                 return tone * envelope * 0.45f;
+            });
+        }
+
+        /// <summary>A short, soft click for a button press.</summary>
+        static AudioClip BuildTick()
+        {
+            return Create("Tick", 0.045f, (t, phase) =>
+            {
+                float tone = Mathf.Sin(2f * Mathf.PI * 1750f * t) + 0.4f * Mathf.Sin(2f * Mathf.PI * 3500f * t);
+                return tone * Mathf.Exp(-110f * t) * 0.5f;
             });
         }
 
