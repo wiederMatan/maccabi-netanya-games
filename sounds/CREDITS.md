@@ -13,3 +13,13 @@ Each was trimmed, faded and loudness-normalised, then encoded to AAC (.m4a).
 | applause.m4a | [Clapping hurray.ogg](https://commons.wikimedia.org/wiki/File:Clapping_hurray.ogg) (first 6.5s) | starlite | Public domain |
 
 The ball kick is synthesised in `app.js`.
+
+## Music
+
+`music-anthem.m4a` (stadium anthem loop), `music-drums.m4a` (supporters' drum
+loop), and the jingles `music-goal.m4a`, `music-win.m4a`, `music-star.m4a` and
+`music-tryagain.m4a` are original compositions made for these games: the
+melodies, chords and rhythms were written and synthesised from scratch in code
+(no samples), so they carry no third-party rights. The same pieces are in the
+Unity projects under `Assets/Resources/Audio/Music/`.
+

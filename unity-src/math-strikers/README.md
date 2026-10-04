@@ -80,7 +80,15 @@ synthesised, and each recording falls back to a synthesised stand-in if its clip
 missing. The web page's sound button mutes the game through
 `SendMessage("MatchAudio", "SetMuted", "1")`.
 
-The clips are the same ones the memory game uses, all CC0 or public domain from
+The music is our own (CC0), in `Assets/Resources/Audio/Music/`: the stadium anthem
+loops at 0.3 behind the start and full-time cards and fades out over 0.8 s at kick-off;
+the supporters' drums loop at 0.22 during play (pitch 1.08 while the clock is under
+10 s) and fade out at full time. A goal plays MusicGoal over a softer cheer. After the
+full-time whistles a win plays MusicWin and a draw or loss MusicTryAgain, then the
+anthem fades back in; each earned star fills 0.25 s apart with MusicStar. All of it
+goes through the AudioListener, so the page's mute covers the music too.
+
+The stadium clips are the same ones the memory game uses, all CC0 or public domain from
 Wikimedia Commons; sources and authors are in `sounds/CREDITS.md` at the repo root.
 
 The web page is generated from `Assets/WebGLTemplates/MaccabiNetanya/index.html`, so

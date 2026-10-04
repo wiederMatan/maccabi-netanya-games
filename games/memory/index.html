@@ -154,6 +154,7 @@
   <script src="../../app.js"></script>
   <script>
     sfx.bindToggle(document.getElementById('sound-toggle'));
+    sfx.music('anthem');
 
     // Maccabi Netanya squad
     const roster = [
@@ -200,6 +201,7 @@
       document.getElementById('level-select').style.display = 'grid';
       document.body.classList.remove('playing');
       sfx.crowd(false);
+      sfx.music('anthem');
       document.getElementById('game-area').style.display = 'none';
     }
 
@@ -216,6 +218,7 @@
         localStorage.setItem('maccabi-netanya-last', 'memory');
       } catch (e) {}
       sfx.crowd(true);
+      sfx.music('drums');
       sfx.whistle();
       document.getElementById('level-label').textContent = cfg.label;
       document.getElementById('total-pairs').textContent = totalPairs;
@@ -303,12 +306,16 @@
         if (matched === totalPairs) {
           document.getElementById('win-msg').classList.add('show');
           haptic([40, 60, 40, 60, 120]);
+          sfx.music(null);
           sfx.finalWhistle();
-          setTimeout(sfx.applause, 900);
-          setTimeout(() => sfx.crowd(false), 1500);
+          setTimeout(() => sfx.jingle('win', 0.9), 900);
+          setTimeout(sfx.applause, 2600);
+          setTimeout(() => sfx.crowd(false), 3200);
+          setTimeout(() => sfx.music('anthem'), 4200);
           awardStars();
         } else {
           haptic(35);
+          sfx.jingle('star', 0.6);
           sfx.cheer();
         }
       } else {

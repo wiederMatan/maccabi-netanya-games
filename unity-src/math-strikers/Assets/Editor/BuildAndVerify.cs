@@ -30,6 +30,7 @@ namespace MathStrikers.EditorTools
             failures += CheckStars();
             failures += CheckSceneWiring();
             failures += CheckLook();
+            failures += CheckMusic();
 
             if (failures > 0)
             {
@@ -245,6 +246,49 @@ namespace MathStrikers.EditorTools
 
             if (failures == 0)
                 Debug.Log($"[Verify] Look: OK ({texts.Length} texts in Fredoka, {buttons.Length} buttons with press feedback, bridge plugin present).");
+            return failures;
+        }
+
+        /// <summary>
+        /// The six music clips load, and MatchAudio wires them up: the anthem and
+        /// drums on looping sources of their own, the stings as one-shots.
+        /// </summary>
+        static int CheckMusic()
+        {
+            int failures = 0;
+            failures += Require(MatchAudio.MusicClips.Length == 6, $"Expected 6 music clips, listed {MatchAudio.MusicClips.Length}.");
+            foreach (var (name, loops) in MatchAudio.MusicClips)
+            {
+                var clip = MatchAudio.LoadMusic(name);
+                failures += Require(clip != null, $"Music clip {name} does not load from Resources/Audio/Music.");
+                if (clip != null && !loops)
+                    failures += Require(clip.length < 5f, $"{name} is {clip.length:0.0}s; a sting should be short.");
+            }
+
+            // Run MatchAudio's Awake on a throwaway object to see what it builds.
+            var probe = new GameObject("MusicProbe", typeof(AudioSource));
+            try
+            {
+                var audio = probe.AddComponent<MatchAudio>();
+                typeof(MatchAudio).GetMethod("Awake", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                    .Invoke(audio, null);
+
+                foreach (var (label, music, name) in new[] { ("Anthem", audio.AnthemSource, MatchAudio.Anthem), ("Drums", audio.DrumsSource, MatchAudio.Drums) })
+                {
+                    failures += Require(music != null, $"{label} has no AudioSource.");
+                    if (music == null) continue;
+                    failures += Require(music.clip != null && music.clip.name == name, $"{label} source plays {(music.clip ? music.clip.name : "nothing")}.");
+                    failures += Require(music.loop, $"{label} does not loop.");
+                    failures += Require(!music.playOnAwake, $"{label} plays on awake.");
+                }
+                failures += Require(audio.AnthemSource != audio.DrumsSource, "Anthem and drums share a source.");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(probe);
+            }
+
+            if (failures == 0) Debug.Log("[Verify] Music: OK (6 clips load; anthem and drums loop on their own sources).");
             return failures;
         }
 

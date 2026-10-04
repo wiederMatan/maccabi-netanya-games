@@ -43,10 +43,14 @@
   // callback, and just shares the one remembered mute setting.
   function createSfx() {
     var MUTE_KEY = 'maccabi-netanya-muted';
-    var CLIPS = ['crowd', 'cheer', 'ohh', 'whistle', 'applause'];
+    var CLIPS = ['crowd', 'cheer', 'ohh', 'whistle', 'applause',
+                 'music-anthem', 'music-drums', 'music-goal', 'music-win', 'music-star', 'music-tryagain'];
+    // Background music loops, with the volume each one plays at.
+    var MUSIC_VOLUME = { anthem: 0.3, drums: 0.22 };
     var base = (document.currentScript && document.currentScript.src || '/app.js').replace(/app\.js.*$/, 'sounds/');
     var ctx = null, master = null, buffers = {}, loading = null, unlocked = false;
     var crowd = null, crowdGain = null, wantCrowd = false;
+    var music = null, musicGain = null, musicName = null, wantMusic = null;
     var muted = false, listeners = [];
     try { muted = localStorage.getItem(MUTE_KEY) === '1'; } catch (e) {}
 
@@ -86,7 +90,10 @@
           })
           .then(function (buf) { buffers[name] = buf; })
           .catch(function () {});
-      })).then(function () { if (wantCrowd) startCrowd(); });
+      })).then(function () {
+        if (wantCrowd) startCrowd();
+        if (wantMusic) setMusic(wantMusic);
+      });
       return loading;
     }
 
@@ -145,6 +152,31 @@
       crowd = null;
     }
 
+    // One music loop at a time: the anthem on menus, the drums in play.
+    // Switching fades the old loop out and the new one in.
+    function setMusic(name) {
+      wantMusic = name;
+      if (!ctx || name === musicName) return;
+      if (music) {
+        var old = music, oldGain = musicGain, t = ctx.currentTime;
+        oldGain.gain.cancelScheduledValues(t);
+        oldGain.gain.setValueAtTime(oldGain.gain.value, t);
+        oldGain.gain.linearRampToValueAtTime(0, t + 0.8);
+        old.stop(t + 0.85);
+        music = null; musicName = null;
+      }
+      if (!name || !buffers['music-' + name]) return;
+      music = ctx.createBufferSource();
+      musicGain = ctx.createGain();
+      music.buffer = buffers['music-' + name];
+      music.loop = true;
+      musicGain.gain.setValueAtTime(0, ctx.currentTime);
+      musicGain.gain.linearRampToValueAtTime(MUSIC_VOLUME[name] || 0.25, ctx.currentTime + 0.8);
+      music.connect(musicGain).connect(master);
+      music.start();
+      musicName = name;
+    }
+
     function setMuted(value) {
       muted = value;
       try { localStorage.setItem(MUTE_KEY, muted ? '1' : '0'); } catch (e) {}
@@ -183,6 +215,10 @@
         });
       },
       applause: function () { play('applause', 0.8); },
+      // Original music composed for the site (see sounds/CREDITS.md):
+      // sfx.music('anthem' | 'drums' | null), sfx.jingle('goal' | 'win' | 'star' | 'tryagain').
+      music: setMusic,
+      jingle: function (name, volume) { play('music-' + name, volume == null ? 0.8 : volume); },
       crowd: function (on) {
         wantCrowd = on;
         if (on) startCrowd(); else stopCrowd();

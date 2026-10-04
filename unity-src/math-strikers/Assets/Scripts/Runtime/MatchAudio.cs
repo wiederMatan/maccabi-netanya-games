@@ -8,6 +8,11 @@ namespace MathStrikers
     /// real recordings loaded from Resources/Audio (CC0 / public domain, credited in
     /// the README). The kick is synthesised, and every recording falls back to a
     /// synthesised stand-in if its clip is missing, so the match is never silent.
+    ///
+    /// The music is our own (CC0, Resources/Audio/Music): a stadium anthem loops
+    /// behind the start and full-time cards, supporters' drums loop during play,
+    /// and short stings mark a goal, the result and each star earned. Everything
+    /// plays through the AudioListener, so the page's mute silences it all.
     /// </summary>
     [RequireComponent(typeof(AudioSource))]
     public class MatchAudio : MonoBehaviour
@@ -16,7 +21,27 @@ namespace MathStrikers
         const float CrowdVolume = 0.35f;
         const float CrowdSwellVolume = 0.75f;
 
+        const float AnthemVolume = 0.3f;
+        const float DrumsVolume = 0.22f;
+        const float UrgentDrumsPitch = 1.08f;
+
+        public const string Anthem = "MusicAnthem";
+        public const string Drums = "MusicDrums";
+        public const string GoalSting = "MusicGoal";
+        public const string Win = "MusicWin";
+        public const string Star = "MusicStar";
+        public const string TryAgain = "MusicTryAgain";
+
+        /// <summary>Every music clip, and whether it loops (VerifyScene checks these load).</summary>
+        public static readonly (string name, bool loops)[] MusicClips =
+        {
+            (Anthem, true), (Drums, true), (GoalSting, false), (Win, false), (Star, false), (TryAgain, false)
+        };
+
         public static MatchAudio Instance { get; private set; }
+
+        public AudioSource AnthemSource => anthemSource;
+        public AudioSource DrumsSource => drumsSource;
 
         AudioSource source;
         AudioSource crowdSource;
@@ -28,6 +53,16 @@ namespace MathStrikers
         AudioClip whistle;
         AudioClip applause;
         AudioClip tick;
+
+        AudioSource anthemSource;
+        AudioSource drumsSource;
+        Coroutine anthemFade;
+        Coroutine drumsFade;
+        Coroutine anthemReturn;
+        AudioClip goalSting;
+        AudioClip winSting;
+        AudioClip starSting;
+        AudioClip tryAgainSting;
 
         void Awake()
         {
@@ -53,6 +88,81 @@ namespace MathStrikers
                 crowdSource.spatialBlend = 0f;
                 crowdSource.volume = 0f;
             }
+
+            anthemSource = MusicSource(LoadMusic(Anthem));
+            drumsSource = MusicSource(LoadMusic(Drums));
+            goalSting = LoadMusic(GoalSting);
+            winSting = LoadMusic(Win);
+            starSting = LoadMusic(Star);
+            tryAgainSting = LoadMusic(TryAgain);
+        }
+
+        public static AudioClip LoadMusic(string name) => Resources.Load<AudioClip>("Audio/Music/" + name);
+
+        AudioSource MusicSource(AudioClip clip)
+        {
+            if (clip == null) return null;
+            var music = gameObject.AddComponent<AudioSource>();
+            music.clip = clip;
+            music.loop = true;
+            music.playOnAwake = false;
+            music.spatialBlend = 0f;
+            music.volume = 0f;
+            return music;
+        }
+
+        // ---------------------------------------------------------------- music
+
+        /// <summary>The anthem behind the start and full-time cards.</summary>
+        public void PlayMenuMusic()
+        {
+            if (anthemReturn != null) { StopCoroutine(anthemReturn); anthemReturn = null; }
+            FadeIn(anthemSource, AnthemVolume, 1f, ref anthemFade);
+        }
+
+        /// <summary>Kick-off: the anthem gives way to the supporters' drums.</summary>
+        public void PlayMatchMusic()
+        {
+            if (anthemReturn != null) { StopCoroutine(anthemReturn); anthemReturn = null; }
+            FadeOut(anthemSource, 0.8f, ref anthemFade);
+            SetUrgent(false);
+            FadeIn(drumsSource, DrumsVolume, 1.2f, ref drumsFade);
+        }
+
+        /// <summary>The drums push on a little while the answer clock runs low.</summary>
+        public void SetUrgent(bool urgent)
+        {
+            if (drumsSource != null) drumsSource.pitch = urgent ? UrgentDrumsPitch : 1f;
+        }
+
+        /// <summary>One sparkle per star as it fills on the full-time card.</summary>
+        public void PlayStar() => Play(starSting, 0.7f);
+
+        void FadeIn(AudioSource music, float volume, float seconds, ref Coroutine fade)
+        {
+            if (music == null) return;
+            if (fade != null) StopCoroutine(fade);
+            if (!music.isPlaying) { music.volume = 0f; music.Play(); }
+            fade = StartCoroutine(Fade(music, volume, seconds, false));
+        }
+
+        void FadeOut(AudioSource music, float seconds, ref Coroutine fade)
+        {
+            if (music == null || !music.isPlaying) return;
+            if (fade != null) StopCoroutine(fade);
+            fade = StartCoroutine(Fade(music, 0f, seconds, true));
+        }
+
+        static IEnumerator Fade(AudioSource music, float target, float seconds, bool stopAtEnd)
+        {
+            float from = music.volume;
+            for (float t = 0f; t < seconds; t += Time.unscaledDeltaTime)
+            {
+                music.volume = Mathf.Lerp(from, target, t / seconds);
+                yield return null;
+            }
+            music.volume = target;
+            if (stopAtEnd) music.Stop();
         }
 
         void OnDestroy()
@@ -75,21 +185,28 @@ namespace MathStrikers
             StartCrowd();
         }
 
-        /// <summary>A goal: a cheer, with the whole crowd lifting behind it.</summary>
+        /// <summary>A goal: the goal sting over a softer cheer, with the crowd lifting behind it.</summary>
         public void PlayGoal()
         {
-            Play(goal, 0.8f);
+            Play(goal, 0.5f);
+            Play(goalSting, 0.75f);
             SwellCrowd();
         }
 
-        /// <summary>Full time: two short blasts and a long one, then applause for a win or draw.</summary>
-        public void PlayFullTime(bool applaud)
+        /// <summary>
+        /// Full time: the drums stop, two short blasts and a long one, then the win
+        /// fanfare (or the "nearly!" sting), applause for a win or draw, and the
+        /// anthem back once the sting has finished.
+        /// </summary>
+        public void PlayFullTime(bool won, bool drew)
         {
-            StartCoroutine(FullTime(applaud));
+            FadeOut(drumsSource, 0.6f, ref drumsFade);
+            StartCoroutine(FullTime(won, drew));
         }
 
-        IEnumerator FullTime(bool applaud)
+        IEnumerator FullTime(bool won, bool drew)
         {
+            bool applaud = won || drew;
             Play(whistle, 0.55f, 1.05f);
             yield return new WaitForSeconds(0.35f);
             Play(whistle, 0.55f, 1.05f);
@@ -98,6 +215,17 @@ namespace MathStrikers
             yield return new WaitForSeconds(0.25f);
             if (applaud && applause != null) Play(applause, 0.8f);
             if (applaud) SwellCrowd();
+
+            var sting = won ? winSting : tryAgainSting;
+            Play(sting, 0.8f);
+            anthemReturn = StartCoroutine(AnthemAfter(sting != null ? sting.length : 0.5f));
+        }
+
+        IEnumerator AnthemAfter(float delay)
+        {
+            yield return new WaitForSeconds(delay);
+            anthemReturn = null;
+            FadeIn(anthemSource, AnthemVolume, 1.5f, ref anthemFade);
         }
 
         /// <summary>

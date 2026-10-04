@@ -1,3 +1,4 @@
+using System.Collections;
 using MaccabiShared;
 using UnityEngine;
 using UnityEngine.UI;
@@ -14,6 +15,11 @@ namespace MathStrikers
         // Characters per line for the overlay paragraph: it is pre-wrapped here,
         // since wrapping after the RTL reversal would put the last line on top.
         const int BodyLineChars = 38;
+        // Earned stars fill one by one once the card has popped in, each with a sparkle.
+        const float FirstStarDelay = 0.9f;
+        const float StarStagger = 0.25f;
+
+        Coroutine starFill;
 
         [SerializeField] Text problemText;
         [SerializeField] Text shotText;
@@ -184,18 +190,49 @@ namespace MathStrikers
 
             if (starRow != null) starRow.SetActive(earnedStars >= 0);
             if (stars == null) return;
-            for (int i = 0; i < stars.Length; i++)
+            for (int i = 0; i < stars.Length; i++) PaintStar(i, false);
+            if (starFill != null) StopCoroutine(starFill);
+            starFill = earnedStars > 0 ? StartCoroutine(FillStars(earnedStars)) : null;
+        }
+
+        IEnumerator FillStars(int earned)
+        {
+            yield return new WaitForSecondsRealtime(FirstStarDelay);
+            for (int i = 0; i < earned && i < stars.Length; i++)
             {
-                if (stars[i] == null) continue;
-                bool earned = i < earnedStars;
-                stars[i].color = earned ? Palette.Gold400 : Palette.Navy700;
-                var outline = stars[i].GetComponent<Outline>();
-                if (outline != null) outline.effectColor = earned ? Palette.Gold900 : Palette.Navy900;
+                PaintStar(i, true);
+                MatchAudio.Instance?.PlayStar();
+                if (stars[i] != null) StartCoroutine(PopStar(stars[i].rectTransform));
+                yield return new WaitForSecondsRealtime(StarStagger);
             }
+            starFill = null;
+        }
+
+        static IEnumerator PopStar(RectTransform star)
+        {
+            const float seconds = 0.25f;
+            for (float t = 0f; t < seconds; t += Time.unscaledDeltaTime)
+            {
+                star.localScale = Vector3.one * Mathf.LerpUnclamped(0.4f, 1f, Ease.OutBack(t / seconds, 2.4f));
+                yield return null;
+            }
+            star.localScale = Vector3.one;
+        }
+
+        void PaintStar(int index, bool earned)
+        {
+            var star = stars[index];
+            if (star == null) return;
+            star.color = earned ? Palette.Gold400 : Palette.Navy700;
+            star.rectTransform.localScale = Vector3.one;
+            var outline = star.GetComponent<Outline>();
+            if (outline != null) outline.effectColor = earned ? Palette.Gold900 : Palette.Navy900;
         }
 
         public void HideOverlay()
         {
+            if (starFill != null) StopCoroutine(starFill);
+            starFill = null;
             if (startPanel != null) startPanel.SetActive(false);
         }
 

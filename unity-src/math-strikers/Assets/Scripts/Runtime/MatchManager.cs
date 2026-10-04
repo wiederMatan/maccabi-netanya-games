@@ -146,6 +146,7 @@ namespace MathStrikers
                 hud.SetTimer(AnswerSeconds, AnswerSeconds);
                 hud.ShowOverlay(Title, Intro, KickOffLabel);
             }
+            audio_?.PlayMenuMusic();
         }
 
         void Update()
@@ -154,6 +155,7 @@ namespace MathStrikers
 
             timeLeft -= Time.deltaTime;
             hud?.SetTimer(timeLeft, AnswerSeconds);
+            audio_?.SetUrgent(timeLeft < 10f);
 
             if (timeLeft <= 0f)
             {
@@ -205,6 +207,7 @@ namespace MathStrikers
             hud?.SetScoreline(0, 0);
             hud?.SetBanner($"משחק {matchIndex + 1}", $"נגד {CurrentOpponent}");
             audio_?.PlayWhistle();
+            audio_?.PlayMatchMusic();
             NextShot();
         }
 
@@ -239,6 +242,7 @@ namespace MathStrikers
             if (!awaitingAnswer || shotInProgress || zone == null) return;
 
             awaitingAnswer = false;
+            audio_?.SetUrgent(false);
             shotInProgress = true;
 
             foreach (var z in zones) z.SetInteractable(false);
@@ -308,6 +312,7 @@ namespace MathStrikers
         void TimeUp()
         {
             awaitingAnswer = false;
+            audio_?.SetUrgent(false);
             shotInProgress = true;
 
             foreach (var z in zones)
@@ -448,7 +453,8 @@ namespace MathStrikers
 
             bool won = playerGoals > opponentGoals;
             bool drew = playerGoals == opponentGoals;
-            audio_?.PlayFullTime(won || drew);
+            audio_?.SetUrgent(false);
+            audio_?.PlayFullTime(won, drew);
 
             int stars = StarsFor(playerGoals, opponentGoals, correctAnswers);
             PortalBridge.AddStars(stars);
