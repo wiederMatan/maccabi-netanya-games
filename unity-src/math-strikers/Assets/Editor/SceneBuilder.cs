@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using MaccabiShared;
 using MathStrikers;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -37,8 +38,6 @@ namespace MathStrikers.EditorTools
         static readonly Color KitBlack = new Color(0.09f, 0.09f, 0.10f);
         static readonly Color KeeperTeal = new Color(0.10f, 0.42f, 0.40f);
         static readonly Color Skin = new Color(0.85f, 0.70f, 0.55f);
-        static readonly Color Gold = new Color(0.91f, 0.71f, 0.30f);
-        static readonly Color PanelBlue = new Color(0.07f, 0.17f, 0.27f, 0.92f);
 
         [MenuItem("Math Strikers/Build Match Scene")]
         public static void BuildScene()
@@ -47,6 +46,7 @@ namespace MathStrikers.EditorTools
             EnsureFolder(MaterialsFolder);
 
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            UiSprites.Generate();
 
             BuildEnvironment();
             var ball = BuildBall();
@@ -242,7 +242,7 @@ namespace MathStrikers.EditorTools
                 caption.transform.localPosition = new Vector3(0f, 0f, -0.55f);
 
                 var text = caption.AddComponent<TextMesh>();
-                text.text = "MACCABI NETANYA";
+                text.text = Rtl.Fix("מכבי נתניה");
                 text.font = font;
                 text.fontSize = 72;
                 text.anchor = TextAnchor.MiddleCenter;
@@ -417,7 +417,10 @@ namespace MathStrikers.EditorTools
         {
             var root = new GameObject("TargetZones");
             var font = BuiltinFont();
-            var panelMaterial = GetMaterial("ZonePanel", PanelBlue, 0f, 0.25f, true);
+            // Rounded boards with a gold rim, matching the HUD's panels. Alpha-cut
+            // rather than blended so the rim and face sort cleanly against each other.
+            var panelMaterial = GetCutoutMaterial("ZoneBoard", Palette.Navy700, UiSprites.Board);
+            var rimMaterial = GetCutoutMaterial("ZoneRim", Palette.Gold400, UiSprites.Board);
 
             // The answer boards stand on the grass in front of the goal rather than
             // hanging in the goal mouth, where the keeper and the net hid them.
@@ -451,14 +454,14 @@ namespace MathStrikers.EditorTools
                 var panelRenderer = panel.GetComponent<Renderer>();
                 panelRenderer.sharedMaterial = panelMaterial;
 
-                // A pale rim so each board separates from the grass behind it.
-                var rim = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                // A gold rim just behind the face so each board stands off the grass.
+                var rim = GameObject.CreatePrimitive(PrimitiveType.Quad);
                 rim.name = "Rim";
                 rim.transform.SetParent(zoneObject.transform, false);
-                rim.transform.localPosition = new Vector3(0f, -BoardHeight / 2f - 0.03f, 0f);
-                rim.transform.localScale = new Vector3(BoardWidth + 0.06f, 0.05f, 0.11f);
+                rim.transform.localPosition = new Vector3(0f, 0f, 0.01f);
+                rim.transform.localScale = new Vector3(BoardWidth + 0.09f, BoardHeight + 0.09f, 1f);
                 Object.DestroyImmediate(rim.GetComponent<Collider>());
-                rim.GetComponent<Renderer>().sharedMaterial = GetMaterial("GoalWhite", Chalk, 0f, 0.45f);
+                rim.GetComponent<Renderer>().sharedMaterial = rimMaterial;
 
                 // TextMesh already reads correctly from the -z side, which is where the
                 // camera sits - rotating it to "face" the camera mirrors the glyphs.
@@ -482,7 +485,7 @@ namespace MathStrikers.EditorTools
                 keyHint.transform.localPosition = new Vector3(0f, -BoardHeight * 0.30f, -0.10f);
                 keyHint.transform.localScale = Vector3.one * 0.026f;
                 var hint = keyHint.AddComponent<TextMesh>();
-                hint.text = $"press {i + 1}";
+                hint.text = Rtl.Fix($"מקש {i + 1}");
                 hint.font = font;
                 hint.fontSize = 72;
                 hint.anchor = TextAnchor.MiddleCenter;
@@ -500,7 +503,7 @@ namespace MathStrikers.EditorTools
                     GoalLineZ + 0.6f - BoardZ);
 
                 var zone = zoneObject.AddComponent<TargetZone>();
-                zone.Bind(panelRenderer, label, aim.transform);
+                zone.Bind(panelRenderer, label, aim.transform, keyHint);
                 EditorUtility.SetDirty(zone);
                 zones[i] = zone;
             }
@@ -570,185 +573,306 @@ namespace MathStrikers.EditorTools
             eventSystem.AddComponent<EventSystem>();
             eventSystem.AddComponent<StandaloneInputModule>();
 
+            var cream = Palette.Cream;
+            var soft = Palette.WithAlpha(Palette.Cream, 0.75f);
+
             // --- score bar (bottom) ---------------------------------------------
-            // Along the bottom edge, so the question has the top of the screen to
-            // itself. The page's buttons sit just above its right end.
-            var topBar = Panel(canvasObject.transform, "ScoreBar",
-                new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0f, 110f),
-                new Color(0.05f, 0.11f, 0.17f, 0.82f));
-            SetStretchWidth(topBar, 40f, 40f, 30f, 110f);
+            // Along the bottom edge, 30 units up and 110 tall: the page's round
+            // buttons sit just above its right end (placeCorner in the page).
+            // Laid out right to left: the pills start at the right, where a Hebrew
+            // reader starts, and the match banner fills what is left.
+            var bar = Sliced(canvasObject.transform, "ScoreBar", UiSprites.Panel, Color.white);
+            var barRect = bar.rectTransform;
+            barRect.anchorMin = new Vector2(0f, 0f);
+            barRect.anchorMax = new Vector2(1f, 0f);
+            barRect.pivot = new Vector2(0.5f, 0f);
+            barRect.offsetMin = new Vector2(40f, 30f);
+            barRect.offsetMax = new Vector2(-40f, 140f);
+            AddShadow(bar.gameObject);
 
-            var scoreLabel = Label(topBar.transform, "ScoreLabel", "SCORE", font, 22, Chalk * 0.7f,
-                TextAnchor.MiddleLeft, new Vector2(30f, -24f), new Vector2(240f, 28f));
-            var scoreValue = Label(topBar.transform, "ScoreValue", "0", font, 46, Gold,
-                TextAnchor.MiddleLeft, new Vector2(30f, -66f), new Vector2(240f, 48f));
+            float pillRight = 14f;
+            var scoreValue = Counter(bar.transform, "Score", "נקודות", UiSprites.Star, Palette.Gold400, 220f, ref pillRight, font);
+            var streakValue = Counter(bar.transform, "Streak", "רצף", UiSprites.Bolt, Palette.Gold400, 160f, ref pillRight, font);
+            var scorelineValue = Counter(bar.transform, "Match", "תוצאה", UiSprites.Ball, Color.white, 200f, ref pillRight, font);
+            scorelineValue.supportRichText = true;
 
-            // Columns kept tight so the opponent banner fits beside them on a phone.
-            var streakLabel = Label(topBar.transform, "StreakLabel", "STREAK", font, 22, Chalk * 0.7f,
-                TextAnchor.MiddleLeft, new Vector2(240f, -24f), new Vector2(200f, 28f));
-            var streakValue = Label(topBar.transform, "StreakValue", "0", font, 40, Chalk,
-                TextAnchor.MiddleLeft, new Vector2(240f, -66f), new Vector2(200f, 48f));
-
-            var scorelineLabel = Label(topBar.transform, "ScorelineLabel", "MATCH", font, 22, Chalk * 0.7f,
-                TextAnchor.MiddleLeft, new Vector2(430f, -24f), new Vector2(200f, 28f));
-            var scorelineValue = Label(topBar.transform, "ScorelineValue", "0 – 0", font, 40, Chalk,
-                TextAnchor.MiddleLeft, new Vector2(430f, -66f), new Vector2(200f, 48f));
-
-            var banner = Label(topBar.transform, "Banner", "Career", font, 26, Gold,
-                TextAnchor.MiddleRight, new Vector2(-30f, -55f), new Vector2(700f, 40f));
-            SetAnchor(banner.rectTransform, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f));
+            var matchLine = Label(bar.transform, "BannerMatch", "", font, 24, soft,
+                TextAnchor.MiddleRight, Vector2.zero, new Vector2(10f, 30f));
+            Stretch(matchLine.rectTransform, 24f, pillRight + 18f, 18f, 30f);
+            var opponentLine = Label(bar.transform, "Banner", "", font, 32, Palette.Gold400,
+                TextAnchor.MiddleRight, Vector2.zero, new Vector2(10f, 40f));
+            Stretch(opponentLine.rectTransform, 24f, pillRight + 18f, -16f, 40f);
 
             // --- problem card (top centre) -------------------------------------
             // The question is the first thing to read, so it gets the top of the
-            // screen; a bottom bar used to sit right on top of the ball.
-            var card = Panel(canvasObject.transform, "ProblemCard",
-                new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(980f, 200f),
-                new Color(0.05f, 0.11f, 0.17f, 0.85f));
-            var cardRect = card.GetComponent<RectTransform>();
-            cardRect.pivot = new Vector2(0.5f, 1f);
-            cardRect.sizeDelta = new Vector2(980f, 200f);
-            cardRect.anchoredPosition = new Vector2(0f, -30f);
+            // screen. 200 tall and 30 down: CameraFramer frames the pitch below it.
+            var card = Sliced(canvasObject.transform, "ProblemCard", UiSprites.Panel, Color.white);
+            Place(card.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -30f), new Vector2(920f, 200f));
+            AddShadow(card.gameObject);
 
-            var problem = Label(card.transform, "Problem", "", font, 64, Chalk,
-                TextAnchor.MiddleCenter, new Vector2(0f, -16f), new Vector2(920f, 80f));
-            SetAnchor(problem.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f));
+            var shot = Label(card.transform, "Shot", "", font, 24, soft,
+                TextAnchor.MiddleRight, Vector2.zero, new Vector2(300f, 34f));
+            Place(shot.rectTransform, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-34f, -14f), new Vector2(300f, 34f));
+
+            // The sum itself stays left to right ("7 + 3 = ?").
+            var problem = Label(card.transform, "Problem", "", font, 72, cream,
+                TextAnchor.MiddleCenter, Vector2.zero, new Vector2(900f, 86f));
+            Place(problem.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -12f), new Vector2(900f, 86f));
 
             // The clock is the pressure, so it gets its own bar rather than a number
-            // tucked in a corner.
-            var track = Panel(card.transform, "TimerTrack",
-                new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(860f, 14f),
-                new Color(0.10f, 0.20f, 0.26f, 1f));
-            var trackRect = track.GetComponent<RectTransform>();
+            // tucked in a corner. It drains toward the right.
+            var track = Sliced(card.transform, "TimerTrack", UiSprites.Pill, Palette.Navy900);
+            var trackRect = track.rectTransform;
+            trackRect.anchorMin = new Vector2(0f, 1f);
+            trackRect.anchorMax = new Vector2(1f, 1f);
             trackRect.pivot = new Vector2(0.5f, 1f);
-            trackRect.sizeDelta = new Vector2(860f, 14f);
-            trackRect.anchoredPosition = new Vector2(-30f, -112f);
+            trackRect.offsetMin = new Vector2(104f, -126f);
+            trackRect.offsetMax = new Vector2(-34f, -106f);
 
-            var fillObject = new GameObject("TimerFill", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-            fillObject.transform.SetParent(track.transform, false);
-            var fillRect = fillObject.GetComponent<RectTransform>();
-            fillRect.anchorMin = Vector2.zero;
-            fillRect.anchorMax = Vector2.one;
-            fillRect.offsetMin = Vector2.zero;
-            fillRect.offsetMax = Vector2.zero;
-            var fillImage = fillObject.GetComponent<Image>();
-            fillImage.color = Gold;
+            var fillImage = Sliced(track.transform, "TimerFill", UiSprites.Pill, Palette.Gold400);
+            Stretch(fillImage.rectTransform);
+            FitPill(track, 20f);
+            FitPill(fillImage, 20f);
 
-            var timerText = Label(card.transform, "TimerText", "30s", font, 30, Gold,
-                TextAnchor.MiddleRight, new Vector2(-26f, -100f), new Vector2(120f, 34f));
-            SetAnchor(timerText.rectTransform, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f));
+            var timerText = Label(card.transform, "TimerText", "30", font, 36, Palette.Gold400,
+                TextAnchor.MiddleCenter, Vector2.zero, new Vector2(70f, 44f));
+            Place(timerText.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(64f, -116f), new Vector2(70f, 44f), new Vector2(0.5f, 0.5f));
 
-            var feedback = Label(card.transform, "Feedback", "", font, 27, Gold,
-                TextAnchor.MiddleCenter, new Vector2(0f, -148f), new Vector2(940f, 36f));
-            SetAnchor(feedback.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f));
+            var feedback = Label(card.transform, "Feedback", "", font, 30, Palette.Gold400,
+                TextAnchor.MiddleCenter, Vector2.zero, new Vector2(900f, 40f));
+            Place(feedback.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -140f), new Vector2(900f, 40f));
 
-            // --- overlay -------------------------------------------------------
-            var overlay = Panel(canvasObject.transform, "Overlay",
-                Vector2.zero, Vector2.one, Vector2.zero, new Color(0.04f, 0.09f, 0.14f, 0.94f));
-            var overlayRect = overlay.GetComponent<RectTransform>();
-            overlayRect.offsetMin = Vector2.zero;
-            overlayRect.offsetMax = Vector2.zero;
+            // --- the big result word (גול! / החמצה) ------------------------------
+            // Below centre, so it lands on the striker rather than over the boards
+            // that show which answer was right.
+            var resultWord = Label(canvasObject.transform, "ResultWord", "", font, 150, Palette.Green400,
+                TextAnchor.MiddleCenter, Vector2.zero, new Vector2(1000f, 200f));
+            Place(resultWord.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, -170f), new Vector2(1000f, 200f), new Vector2(0.5f, 0.5f));
+            AddOutline(resultWord.gameObject, Palette.Navy900, 5f);
+            AddShadow(resultWord.gameObject, 8f);
+            var resultPop = resultWord.gameObject.AddComponent<ResultPop>();
+            resultPop.Bind(resultWord);
 
-            var title = Label(overlay.transform, "Title", "MATH STRIKERS", font, 78, Gold,
-                TextAnchor.MiddleCenter, new Vector2(0f, 275f), new Vector2(1400f, 100f));
-            SetAnchor(title.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
+            // --- overlay: dim layer plus a card that pops in --------------------
+            var overlayImage = Sliced(canvasObject.transform, "Overlay", null, Palette.WithAlpha(Palette.Navy900, 0.8f));
+            var overlay = overlayImage.gameObject;
+            Stretch(overlayImage.rectTransform);
+            overlay.AddComponent<CanvasGroup>();
 
-            var body = Label(overlay.transform, "Body", "", font, 28, Chalk * 0.85f,
-                TextAnchor.UpperCenter, new Vector2(0f, 105f), new Vector2(1000f, 140f));
-            SetAnchor(body.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
+            var sheet = Sliced(overlay.transform, "Card", UiSprites.Panel, Color.white);
+            Place(sheet.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(900f, 840f), new Vector2(0.5f, 0.5f));
+            AddShadow(sheet.gameObject);
+            overlay.AddComponent<OverlayPop>().Bind(sheet.rectTransform);
+            var sheetT = sheet.transform;
 
-            var buttonObject = new GameObject("StartButton", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
-            buttonObject.transform.SetParent(overlay.transform, false);
-            var buttonRect = buttonObject.GetComponent<RectTransform>();
-            SetAnchor(buttonRect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
-            buttonRect.sizeDelta = new Vector2(320f, 84f);
-            buttonRect.anchoredPosition = new Vector2(0f, -250f);
-            var buttonImage = buttonObject.GetComponent<Image>();
-            buttonImage.color = Gold;
-            var button = buttonObject.GetComponent<Button>();
-            button.targetGraphic = buttonImage;
+            var title = Centred(sheetT, "Title", Rtl.Fix(MatchManager.Title), font, 84, Palette.Gold400, 0f, 330f, 860f, 110f);
+            AddOutline(title.gameObject, Palette.Gold900, 3f);
+            AddShadow(title.gameObject, 6f);
 
-            var buttonLabel = Label(buttonObject.transform, "Label", "Kick Off", font, 34,
-                new Color(0.05f, 0.11f, 0.17f), TextAnchor.MiddleCenter, Vector2.zero, new Vector2(320f, 84f));
-            SetAnchor(buttonLabel.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
+            var body = Centred(sheetT, "Body", "", font, 30, cream, 0f, 180f, 840f, 170f);
+            body.lineSpacing = 1.1f;
 
-            // --- difficulty picker ---------------------------------------------
-            var tierCaption = Label(overlay.transform, "DifficultyCaption", "CHOOSE YOUR LEVEL",
-                font, 24, Chalk * 0.65f, TextAnchor.MiddleCenter, new Vector2(0f, -70f), new Vector2(600f, 30f));
-            SetAnchor(tierCaption.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
+            // Three star slots, filled from the right (the first one a Hebrew reader sees).
+            var starRow = new GameObject("Stars", typeof(RectTransform));
+            starRow.transform.SetParent(sheetT, false);
+            Place((RectTransform)starRow.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 30f), new Vector2(420f, 130f), new Vector2(0.5f, 0.5f));
+            var stars = new Image[3];
+            for (int i = 0; i < stars.Length; i++)
+            {
+                var star = Sliced(starRow.transform, $"Star{i + 1}", UiSprites.Star, Palette.Navy700);
+                float size = i == 1 ? 120f : 100f;
+                Place(star.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                    new Vector2((1 - i) * 135f, i == 1 ? 10f : -4f), new Vector2(size, size), new Vector2(0.5f, 0.5f));
+                AddOutline(star.gameObject, Palette.Navy900, 3f);
+                stars[i] = star;
+            }
+            starRow.SetActive(false);
 
-            string[] tierNames = { "Starter", "Easy", "Medium", "Hard" };
-            string[] tierHints = { "+  −  to 20", "+  −  to 80", "+  −  ×", "×  ÷" };
+            Centred(sheetT, "DifficultyCaption", Rtl.Fix("בחר רמה"), font, 28, soft, 0f, -62f, 600f, 36f);
+
+            string[] tierNames = { "מתחילים", "קל", "בינוני", "קשה" };
+            string[] tierHints = { "+ − עד 20", "+ − עד 80", "+ − ×", "× ÷" };
             var tierButtons = new Button[tierNames.Length];
-            var tierBackgrounds = new Image[tierNames.Length];
+            var tierFaces = new Image[tierNames.Length];
+            var tierEdges = new Image[tierNames.Length];
             var tierLabels = new Text[tierNames.Length];
+            var tierHintTexts = new Text[tierNames.Length];
 
             for (int i = 0; i < tierNames.Length; i++)
             {
-                var tierObject = new GameObject($"Difficulty{tierNames[i]}",
-                    typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
-                tierObject.transform.SetParent(overlay.transform, false);
+                // Right to left: the easiest level is the first one on the right.
+                var tier = ChunkyButton(sheetT, $"Difficulty{i}", new Vector2((1.5f - i) * 212f, -150f),
+                    new Vector2(196f, 104f), UiSprites.NavyFace, UiSprites.NavyEdge);
+                var faceT = tier.face.transform;
+                tierLabels[i] = Centred(faceT, "Label", Rtl.Fix(tierNames[i]), font, 32, cream, 0f, 13f, 190f, 40f);
+                tierHintTexts[i] = Centred(faceT, "Hint", Rtl.Fix(tierHints[i]), font, 22, soft, 0f, -21f, 190f, 28f);
 
-                var tierRect = tierObject.GetComponent<RectTransform>();
-                SetAnchor(tierRect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
-                tierRect.sizeDelta = new Vector2(220f, 88f);
-                tierRect.anchoredPosition = new Vector2((i - 1.5f) * 240f, -130f);
-
-                var tierImage = tierObject.GetComponent<Image>();
-                tierImage.color = new Color(0.10f, 0.20f, 0.28f);
-                var tierButton = tierObject.GetComponent<Button>();
-                tierButton.targetGraphic = tierImage;
-
-                var tierLabel = Label(tierObject.transform, "Label", tierNames[i], font, 30,
-                    new Color(0.86f, 0.88f, 0.86f), TextAnchor.MiddleCenter, new Vector2(0f, 14f), new Vector2(220f, 40f));
-                SetAnchor(tierLabel.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
-
-                var tierHint = Label(tierObject.transform, "Hint", tierHints[i], font, 19,
-                    new Color(0.86f, 0.88f, 0.86f, 0.7f), TextAnchor.MiddleCenter, new Vector2(0f, -18f), new Vector2(220f, 26f));
-                SetAnchor(tierHint.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
-
-                tierButtons[i] = tierButton;
-                tierBackgrounds[i] = tierImage;
-                tierLabels[i] = tierLabel;
+                tierButtons[i] = tier.button;
+                tierFaces[i] = tier.face;
+                tierEdges[i] = tier.edge;
             }
 
-            var hud = canvasObject.AddComponent<HudController>();
-            hud.Bind(problem, scoreValue, streakValue, scorelineValue, banner, feedback,
-                timerText, fillImage, overlay, title, body, button, buttonLabel);
-            hud.BindDifficulty(tierButtons, tierBackgrounds, tierLabels);
-            EditorUtility.SetDirty(hud);
+            var kickOff = ChunkyButton(sheetT, "StartButton", new Vector2(0f, -300f), new Vector2(380f, 112f),
+                UiSprites.GoldFace, UiSprites.GoldEdge);
+            var buttonLabel = Centred(kickOff.face.transform, "Label", Rtl.Fix(MatchManager.KickOffLabel), font, 42,
+                Palette.Navy900, 0f, 0f, 370f, 60f);
 
-            // Silence unused-variable warnings for the static captions.
-            _ = scoreLabel; _ = streakLabel; _ = scorelineLabel;
+            var hud = canvasObject.AddComponent<HudController>();
+            hud.Bind(problem, shot, feedback, timerText, fillImage);
+            hud.BindScoreBar(scoreValue, streakValue, scorelineValue, matchLine, opponentLine);
+            hud.BindOverlay(overlay, title, body, kickOff.button, buttonLabel, starRow, stars, resultPop);
+            hud.BindDifficulty(tierButtons, tierFaces, tierEdges, tierLabels, tierHintTexts,
+                UiSprites.GoldFace, UiSprites.GoldEdge, UiSprites.NavyFace, UiSprites.NavyEdge);
+            EditorUtility.SetDirty(hud);
 
             return hud;
         }
 
         // ---------------------------------------------------------------- ui helpers
 
-        static GameObject Panel(Transform parent, string name, Vector2 anchorMin, Vector2 anchorMax,
-            Vector2 sizeDelta, Color color)
+        /// <summary>
+        /// A pill counter in the score bar: icon in a dark circle on the leading
+        /// (right) side, a small label over the value. Placed leftward from
+        /// <paramref name="right"/>, which is advanced past it.
+        /// </summary>
+        static Text Counter(Transform bar, string name, string label, Sprite icon, Color iconColour, float width,
+            ref float right, Font font)
         {
-            var panel = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-            panel.transform.SetParent(parent, false);
+            var pill = Sliced(bar, name + "Pill", UiSprites.Pill, Palette.Navy700);
+            Place(pill.rectTransform, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-right, 0f),
+                new Vector2(width, 84f), new Vector2(1f, 0.5f));
+            right += width + 12f;
 
-            var rect = panel.GetComponent<RectTransform>();
-            rect.anchorMin = anchorMin;
-            rect.anchorMax = anchorMax;
-            rect.pivot = new Vector2(0.5f, anchorMax.y > 0.5f ? 1f : 0f);
-            rect.sizeDelta = sizeDelta;
-            rect.anchoredPosition = Vector2.zero;
+            var badge = Sliced(pill.transform, "IconBadge", UiSprites.Pill, Palette.Navy900);
+            Place(badge.rectTransform, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-12f, 0f),
+                new Vector2(62f, 62f), new Vector2(1f, 0.5f));
+            FitPill(badge, 62f);
+            var glyph = Sliced(badge.transform, "Icon", icon, iconColour);
+            Place(glyph.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero,
+                new Vector2(40f, 40f), new Vector2(0.5f, 0.5f));
 
-            panel.GetComponent<Image>().color = color;
-            return panel;
+            var caption = Label(pill.transform, name + "Label", Rtl.Fix(label), font, 22,
+                Palette.WithAlpha(Palette.Cream, 0.75f), TextAnchor.MiddleRight, Vector2.zero, Vector2.zero);
+            Place(caption.rectTransform, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-86f, 17f),
+                new Vector2(width - 100f, 28f), new Vector2(1f, 0.5f));
+
+            var value = Label(pill.transform, name + "Value", "0", font, 36, Palette.Cream,
+                TextAnchor.MiddleRight, Vector2.zero, Vector2.zero);
+            Place(value.rectTransform, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-86f, -14f),
+                new Vector2(width - 100f, 42f), new Vector2(1f, 0.5f));
+            return value;
         }
 
-        static void SetStretchWidth(GameObject panel, float left, float right, float yOffset, float height)
+        struct Chunky
         {
-            var rect = panel.GetComponent<RectTransform>();
-            rect.offsetMin = new Vector2(left, rect.offsetMin.y);
-            rect.offsetMax = new Vector2(-right, rect.offsetMax.y);
-            rect.sizeDelta = new Vector2(rect.sizeDelta.x, height);
-            rect.anchoredPosition = new Vector2(0f, rect.pivot.y > 0.5f ? -30f : 30f);
+            public Button button;
+            public Image face;
+            public Image edge;
+        }
+
+        /// <summary>
+        /// A chunky casual-game button: a darker lower edge showing 8 units below
+        /// the face so it looks 3D, and press feedback (sink, tick, buzz).
+        /// </summary>
+        static Chunky ChunkyButton(Transform parent, string name, Vector2 position, Vector2 size, Sprite face, Sprite edge)
+        {
+            var root = new GameObject(name, typeof(RectTransform));
+            root.transform.SetParent(parent, false);
+            Place((RectTransform)root.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), position, size, new Vector2(0.5f, 0.5f));
+
+            var edgeImage = Sliced(root.transform, "Edge", edge, Color.white);
+            Stretch(edgeImage.rectTransform);
+            edgeImage.rectTransform.offsetMax = new Vector2(0f, -8f);
+
+            var faceImage = Sliced(root.transform, "Face", face, Color.white);
+            Stretch(faceImage.rectTransform);
+            faceImage.rectTransform.offsetMin = new Vector2(0f, 8f);
+            edgeImage.raycastTarget = faceImage.raycastTarget = true;
+
+            var button = root.AddComponent<Button>();
+            button.targetGraphic = faceImage;
+            var colours = button.colors;
+            colours.highlightedColor = Color.white;
+            colours.pressedColor = new Color(0.9f, 0.9f, 0.9f, 1f);
+            colours.selectedColor = Color.white;
+            button.colors = colours;
+            root.AddComponent<PressFeedback>();
+
+            return new Chunky { button = button, face = faceImage, edge = edgeImage };
+        }
+
+        /// <summary>An Image, 9-sliced when the sprite has borders (or a flat colour with no sprite).</summary>
+        static Image Sliced(Transform parent, string name, Sprite sprite, Color color)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            go.transform.SetParent(parent, false);
+            var image = go.GetComponent<Image>();
+            image.sprite = sprite;
+            image.type = sprite != null && sprite.border.sqrMagnitude > 0f ? Image.Type.Sliced : Image.Type.Simple;
+            image.color = color;
+            image.raycastTarget = false;
+            return image;
+        }
+
+        /// <summary>
+        /// Shrink the pill sprite's round ends to a pill shorter than the sprite;
+        /// otherwise the horizontal borders stay full size and the ends go pointy.
+        /// </summary>
+        static void FitPill(Image image, float height)
+        {
+            image.pixelsPerUnitMultiplier = UiSprites.Pill.rect.height / height;
+        }
+
+        static Text Centred(Transform parent, string name, string content, Font font, int size, Color color,
+            float x, float y, float width, float height)
+        {
+            var text = Label(parent, name, content, font, size, color, TextAnchor.MiddleCenter, Vector2.zero, Vector2.zero);
+            Place(text.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(x, y),
+                new Vector2(width, height), new Vector2(0.5f, 0.5f));
+            return text;
+        }
+
+        static void Place(RectTransform rect, Vector2 anchorMin, Vector2 anchorMax, Vector2 position, Vector2 size,
+            Vector2? pivot = null)
+        {
+            rect.anchorMin = anchorMin;
+            rect.anchorMax = anchorMax;
+            rect.pivot = pivot ?? new Vector2(anchorMin.x, anchorMax.y);
+            rect.sizeDelta = size;
+            rect.anchoredPosition = position;
+        }
+
+        static void Stretch(RectTransform rect)
+        {
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.offsetMin = Vector2.zero;
+            rect.offsetMax = Vector2.zero;
+        }
+
+        /// <summary>Full width between the given insets, centred vertically at y.</summary>
+        static void Stretch(RectTransform rect, float left, float right, float y, float height)
+        {
+            rect.anchorMin = new Vector2(0f, 0.5f);
+            rect.anchorMax = new Vector2(1f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.sizeDelta = new Vector2(-(left + right), height);
+            rect.anchoredPosition = new Vector2((left - right) / 2f, y);
+        }
+
+        static void AddShadow(GameObject target, float drop = 6f)
+        {
+            var shadow = target.AddComponent<Shadow>();
+            shadow.effectColor = new Color(0f, 0f, 0f, 0.35f);
+            shadow.effectDistance = new Vector2(0f, -drop);
+        }
+
+        static void AddOutline(GameObject target, Color color, float width)
+        {
+            var outline = target.AddComponent<Outline>();
+            outline.effectColor = color;
+            outline.effectDistance = new Vector2(width, -width);
         }
 
         static Text Label(Transform parent, string name, string content, Font font, int size,
@@ -770,22 +894,13 @@ namespace MathStrikers.EditorTools
             text.fontSize = size;
             text.color = color;
             text.alignment = anchor;
-            text.horizontalOverflow = HorizontalWrapMode.Wrap;
+            // Never wrap: Hebrew is pre-wrapped by Rtl.Wrap, since wrapping after the
+            // RTL reversal would put the end of a sentence on the first line.
+            text.horizontalOverflow = HorizontalWrapMode.Overflow;
             text.verticalOverflow = VerticalWrapMode.Overflow;
             text.raycastTarget = false;
 
             return text;
-        }
-
-        static void SetAnchor(RectTransform rect, Vector2 min, Vector2 max, Vector2 pivot)
-        {
-            Vector2 position = rect.anchoredPosition;
-            Vector2 size = rect.sizeDelta;
-            rect.anchorMin = min;
-            rect.anchorMax = max;
-            rect.pivot = pivot;
-            rect.sizeDelta = size;
-            rect.anchoredPosition = position;
         }
 
         // ---------------------------------------------------------------- assets
@@ -895,6 +1010,24 @@ namespace MathStrikers.EditorTools
 
             EditorUtility.SetDirty(material);
             MaterialCache[name] = material;
+            return material;
+        }
+
+        /// <summary>A Standard material in cutout mode, its shape taken from the texture's alpha.</summary>
+        static Material GetCutoutMaterial(string name, Color color, Texture2D texture)
+        {
+            var material = GetMaterial(name, color, 0f, 0.2f);
+            material.mainTexture = texture;
+            material.SetFloat("_Mode", 1f);
+            material.SetFloat("_Cutoff", 0.5f);
+            material.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.One);
+            material.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.Zero);
+            material.SetInt("_ZWrite", 1);
+            material.EnableKeyword("_ALPHATEST_ON");
+            material.DisableKeyword("_ALPHABLEND_ON");
+            material.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+            material.renderQueue = (int)UnityEngine.Rendering.RenderQueue.AlphaTest;
+            EditorUtility.SetDirty(material);
             return material;
         }
 

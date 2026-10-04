@@ -1,3 +1,4 @@
+using MaccabiShared;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -5,14 +6,21 @@ namespace MathStrikers
 {
     /// <summary>
     /// Owns every piece of on-screen text. The match manager pushes state in; this
-    /// class decides how it reads.
+    /// class decides how it reads. Hebrew goes through Rtl, because the legacy Text
+    /// lays glyphs out left to right; the sums themselves stay left to right.
     /// </summary>
     public class HudController : MonoBehaviour
     {
+        // Characters per line for the overlay paragraph: it is pre-wrapped here,
+        // since wrapping after the RTL reversal would put the last line on top.
+        const int BodyLineChars = 38;
+
         [SerializeField] Text problemText;
+        [SerializeField] Text shotText;
         [SerializeField] Text scoreText;
         [SerializeField] Text streakText;
         [SerializeField] Text scorelineText;
+        [SerializeField] Text bannerTop;
         [SerializeField] Text bannerText;
         [SerializeField] Text feedbackText;
         [SerializeField] Text timerText;
@@ -22,122 +30,168 @@ namespace MathStrikers
         [SerializeField] Text startBody;
         [SerializeField] Button startButton;
         [SerializeField] Text startButtonLabel;
-        [SerializeField] RawImage portraitImage;
-        [SerializeField] Text portraitName;
-        [SerializeField] Text portraitNumber;
+        [SerializeField] GameObject starRow;
+        [SerializeField] Image[] stars;
+        [SerializeField] ResultPop resultPop;
         [SerializeField] Button[] difficultyButtons;
-        [SerializeField] Image[] difficultyBackgrounds;
+        [SerializeField] Image[] difficultyFaces;
+        [SerializeField] Image[] difficultyEdges;
         [SerializeField] Text[] difficultyLabels;
-
-        static readonly Color Calm = new Color(0.91f, 0.71f, 0.30f);
-        static readonly Color Urgent = new Color(0.88f, 0.28f, 0.25f);
+        [SerializeField] Text[] difficultyHints;
+        [SerializeField] Sprite pickedFace;
+        [SerializeField] Sprite pickedEdge;
+        [SerializeField] Sprite restingFace;
+        [SerializeField] Sprite restingEdge;
 
         public Button StartButton => startButton;
         public Button[] DifficultyButtons => difficultyButtons;
 
-        static readonly Color PickedFill = new Color(0.91f, 0.71f, 0.30f);
-        static readonly Color RestingFill = new Color(0.10f, 0.20f, 0.28f);
-        static readonly Color PickedInk = new Color(0.05f, 0.11f, 0.17f);
-        static readonly Color RestingInk = new Color(0.86f, 0.88f, 0.86f);
-
-        public void Bind(Text problem, Text score, Text streak, Text scoreline, Text banner,
-            Text feedback, Text timer, Image fill, GameObject panel, Text title, Text body,
-            Button button, Text buttonLabel)
+        public void Bind(Text problem, Text shot, Text feedback, Text timer, Image fill)
         {
             problemText = problem;
-            scoreText = score;
-            streakText = streak;
-            scorelineText = scoreline;
-            bannerText = banner;
+            shotText = shot;
             feedbackText = feedback;
             timerText = timer;
             timerFill = fill;
+        }
+
+        public void BindScoreBar(Text score, Text streak, Text scoreline, Text matchLine, Text opponentLine)
+        {
+            scoreText = score;
+            streakText = streak;
+            scorelineText = scoreline;
+            bannerTop = matchLine;
+            bannerText = opponentLine;
+        }
+
+        public void BindOverlay(GameObject panel, Text title, Text body, Button button, Text buttonLabel,
+            GameObject starContainer, Image[] starImages, ResultPop result)
+        {
             startPanel = panel;
             startTitle = title;
             startBody = body;
             startButton = button;
             startButtonLabel = buttonLabel;
+            starRow = starContainer;
+            stars = starImages;
+            resultPop = result;
         }
 
-        public void BindPortrait(RawImage image, Text name, Text number)
-        {
-            portraitImage = image;
-            portraitName = name;
-            portraitNumber = number;
-        }
-
-        /// <summary>Show which Maccabi Netanya player is taking the shots.</summary>
-        public void SetStriker(SquadMember member)
-        {
-            Set(portraitName, member.Name);
-            Set(portraitNumber, member.Shirt);
-
-            if (portraitImage == null) return;
-
-            var portrait = Roster.LoadPortrait(member);
-            portraitImage.texture = portrait;
-            portraitImage.enabled = portrait != null;
-        }
-
-        public void BindDifficulty(Button[] buttons, Image[] backgrounds, Text[] labels)
+        public void BindDifficulty(Button[] buttons, Image[] faces, Image[] edges, Text[] labels, Text[] hints,
+            Sprite goldFace, Sprite goldEdge, Sprite navyFace, Sprite navyEdge)
         {
             difficultyButtons = buttons;
-            difficultyBackgrounds = backgrounds;
+            difficultyFaces = faces;
+            difficultyEdges = edges;
             difficultyLabels = labels;
+            difficultyHints = hints;
+            pickedFace = goldFace;
+            pickedEdge = goldEdge;
+            restingFace = navyFace;
+            restingEdge = navyEdge;
         }
 
         /// <summary>Light up the chosen tier so the current setting is never ambiguous.</summary>
         public void HighlightDifficulty(int index)
         {
-            if (difficultyBackgrounds == null) return;
+            if (difficultyFaces == null) return;
 
-            for (int i = 0; i < difficultyBackgrounds.Length; i++)
+            for (int i = 0; i < difficultyFaces.Length; i++)
             {
                 bool picked = i == index;
-                if (difficultyBackgrounds[i] != null)
-                    difficultyBackgrounds[i].color = picked ? PickedFill : RestingFill;
+                if (difficultyFaces[i] != null) difficultyFaces[i].sprite = picked ? pickedFace : restingFace;
+                if (difficultyEdges != null && i < difficultyEdges.Length && difficultyEdges[i] != null)
+                    difficultyEdges[i].sprite = picked ? pickedEdge : restingEdge;
+
+                var ink = picked ? Palette.Navy900 : Palette.Cream;
                 if (difficultyLabels != null && i < difficultyLabels.Length && difficultyLabels[i] != null)
-                    difficultyLabels[i].color = picked ? PickedInk : RestingInk;
+                    difficultyLabels[i].color = ink;
+                if (difficultyHints != null && i < difficultyHints.Length && difficultyHints[i] != null)
+                    difficultyHints[i].color = Palette.WithAlpha(ink, 0.75f);
             }
         }
 
+        /// <summary>The sum is left to right on purpose ("7 + 3 = ?"), so no Rtl here.</summary>
         public void SetProblem(string text) => Set(problemText, text);
+
+        public void SetShot(int number, int total) =>
+            Set(shotText, number <= 0 ? "" : Rtl.Fix($"בעיטה {number} מתוך {total}"));
+
         public void SetScore(int value) => Set(scoreText, value.ToString());
         public void SetStreak(int value) => Set(streakText, value.ToString());
-        public void SetBanner(string text) => Set(bannerText, text);
-        public void SetFeedback(string text) => Set(feedbackText, text);
 
+        /// <summary>Two short lines at the end of the score bar: which match, and who against.</summary>
+        public void SetBanner(string top, string main)
+        {
+            Set(bannerTop, Rtl.Fix(top));
+            Set(bannerText, Rtl.Fix(main));
+        }
+
+        public void SetFeedback(string hebrew, Color color)
+        {
+            if (feedbackText != null) feedbackText.color = color;
+            Set(feedbackText, Rtl.Fix(hebrew));
+        }
+
+        public void ClearFeedback() => Set(feedbackText, "");
+
+        /// <summary>
+        /// Laid out as the eye reads it right to left: our goals first (gold), then
+        /// the opponent's. Built in visual order, so it skips Rtl.
+        /// </summary>
         public void SetScoreline(int player, int opponent) =>
-            Set(scorelineText, $"{player} – {opponent}");
+            Set(scorelineText, $"{opponent} : <color=#FFD23F>{player}</color>");
+
+        public void ShowResult(string hebrew, Color color) => resultPop?.Show(hebrew, color);
+        public void HideResult() => resultPop?.Hide();
 
         public void SetTimer(float remaining, float limit)
         {
             float fraction = limit <= 0f ? 0f : Mathf.Clamp01(remaining / limit);
+            var colour = remaining <= 8f ? Palette.Red400 : Palette.Gold400;
             if (timerFill != null)
             {
-                // Driven by the anchor rather than Image.fillAmount: a filled Image
-                // needs a source sprite to render, and this bar is a bare colour.
+                // Driven by the anchor rather than Image.fillAmount, so the sliced
+                // pill keeps its round ends. It drains toward the right, where a
+                // Hebrew reader starts.
                 var rect = timerFill.rectTransform;
-                rect.anchorMin = new Vector2(0f, 0f);
-                rect.anchorMax = new Vector2(fraction, 1f);
+                rect.anchorMin = new Vector2(1f - fraction, 0f);
+                rect.anchorMax = new Vector2(1f, 1f);
                 rect.offsetMin = Vector2.zero;
                 rect.offsetMax = Vector2.zero;
-                timerFill.color = remaining <= 8f ? Urgent : Calm;
+                timerFill.enabled = fraction > 0.01f;
+                timerFill.color = colour;
             }
 
             if (timerText != null)
             {
-                timerText.text = $"{Mathf.CeilToInt(Mathf.Max(0f, remaining))}s";
-                timerText.color = remaining <= 8f ? Urgent : Calm;
+                timerText.text = Mathf.CeilToInt(Mathf.Max(0f, remaining)).ToString();
+                timerText.color = colour;
             }
         }
 
-        public void ShowOverlay(string title, string body, string buttonLabel)
+        /// <summary>
+        /// Show the start / full-time card. Title, body and button are logical
+        /// Hebrew. stars &lt; 0 hides the star row (the start screen).
+        /// </summary>
+        public void ShowOverlay(string title, string body, string buttonLabel, int earnedStars = -1)
         {
+            HideResult();
             if (startPanel != null) startPanel.SetActive(true);
-            Set(startTitle, title);
-            Set(startBody, body);
-            Set(startButtonLabel, buttonLabel);
+            Set(startTitle, Rtl.Fix(title));
+            Set(startBody, Rtl.Wrap(body, BodyLineChars));
+            Set(startButtonLabel, Rtl.Fix(buttonLabel));
+
+            if (starRow != null) starRow.SetActive(earnedStars >= 0);
+            if (stars == null) return;
+            for (int i = 0; i < stars.Length; i++)
+            {
+                if (stars[i] == null) continue;
+                bool earned = i < earnedStars;
+                stars[i].color = earned ? Palette.Gold400 : Palette.Navy700;
+                var outline = stars[i].GetComponent<Outline>();
+                if (outline != null) outline.effectColor = earned ? Palette.Gold900 : Palette.Navy900;
+            }
         }
 
         public void HideOverlay()

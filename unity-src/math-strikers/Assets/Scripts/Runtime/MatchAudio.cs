@@ -16,6 +16,8 @@ namespace MathStrikers
         const float CrowdVolume = 0.35f;
         const float CrowdSwellVolume = 0.75f;
 
+        public static MatchAudio Instance { get; private set; }
+
         AudioSource source;
         AudioSource crowdSource;
         Coroutine crowdRamp;
@@ -25,14 +27,17 @@ namespace MathStrikers
         AudioClip miss;
         AudioClip whistle;
         AudioClip applause;
+        AudioClip tick;
 
         void Awake()
         {
+            Instance = this;
             source = GetComponent<AudioSource>();
             source.playOnAwake = false;
             source.spatialBlend = 0f;
 
             kick = BuildKick();
+            tick = BuildTick();
             goal = Load("Cheer") ?? BuildGoal();
             miss = Load("Ohh") ?? BuildMiss();
             whistle = Load("Whistle") ?? BuildWhistle();
@@ -50,7 +55,15 @@ namespace MathStrikers
             }
         }
 
+        void OnDestroy()
+        {
+            if (Instance == this) Instance = null;
+        }
+
         static AudioClip Load(string name) => Resources.Load<AudioClip>("Audio/" + name);
+
+        /// <summary>The button press tick. Goes through the listener, so mute silences it.</summary>
+        public void PlayTick() => Play(tick, 0.35f);
 
         public void PlayKick() => Play(kick, 0.85f);
         public void PlayMiss() => Play(miss, 0.5f);
@@ -179,6 +192,17 @@ namespace MathStrikers
                 float thump = Mathf.Sin(2f * Mathf.PI * Mathf.Lerp(150f, 60f, phase) * t);
                 float crack = (float)(random.NextDouble() * 2.0 - 1.0) * Mathf.Exp(-70f * t);
                 return (thump * 0.75f + crack * 0.5f) * envelope;
+            });
+        }
+
+        /// <summary>A short, soft wooden tick for button presses.</summary>
+        static AudioClip BuildTick()
+        {
+            return Create("Tick", 0.05f, (t, phase) =>
+            {
+                float envelope = Mathf.Exp(-90f * t);
+                float tone = Mathf.Sin(2f * Mathf.PI * 1250f * t) + 0.4f * Mathf.Sin(2f * Mathf.PI * 2600f * t);
+                return tone * envelope * 0.6f;
             });
         }
 

@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using MaccabiShared;
 using MathStrikers;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -25,7 +26,10 @@ namespace MathStrikers.EditorTools
 
             failures += CheckGenerator();
             failures += CheckRoster();
+            failures += CheckRtl();
+            failures += CheckStars();
             failures += CheckSceneWiring();
+            failures += CheckLook();
 
             if (failures > 0)
             {
@@ -155,6 +159,92 @@ namespace MathStrikers.EditorTools
             if (failures == 0)
                 Debug.Log($"[Verify] Roster: OK ({Roster.Strikers.Length} strikers, " +
                           $"{Roster.Squad.Length - Roster.Strikers.Length} keeper(s) held back).");
+            return failures;
+        }
+
+        /// <summary>Hebrew is laid out by hand, so pin the visual order down.</summary>
+        static int CheckRtl()
+        {
+            int failures = 0;
+            failures += Expect(Rtl.Fix("שאלה 3 מתוך 5"), "5 ךותמ 3 הלאש", "Rtl.Fix keeps numbers in place");
+            failures += Expect(Rtl.Fix("כמה זה 7 + 3?"), "?7 + 3 הז המכ", "Rtl.Fix keeps a sum left to right");
+            failures += Expect(Rtl.Fix("7 + 3 = ?"), "7 + 3 = ?", "Rtl.Fix leaves a bare sum alone");
+
+            string wrapped = Rtl.Wrap("אחת שתיים שלוש ארבע", 10);
+            string[] lines = wrapped.Split('\n');
+            failures += Require(lines.Length == 2, $"Rtl.Wrap should make 2 lines, made {lines.Length}.");
+            if (lines.Length == 2)
+            {
+                failures += Expect(lines[0], Rtl.Fix("אחת שתיים"), "Rtl.Wrap keeps the first logical line on top");
+                failures += Expect(lines[1], Rtl.Fix("שלוש ארבע"), "Rtl.Wrap second line");
+            }
+
+            if (failures == 0) Debug.Log("[Verify] Rtl: OK.");
+            return failures;
+        }
+
+        static int Expect(string actual, string expected, string what)
+        {
+            if (actual == expected) return 0;
+            Debug.LogError($"[Verify] {what}: got '{actual}', expected '{expected}'.");
+            return 1;
+        }
+
+        /// <summary>The star rules documented in the README.</summary>
+        static int CheckStars()
+        {
+            int failures = 0;
+            failures += Require(MatchManager.StarsFor(4, 1, 4) == 3, "A win with 4 right answers should earn 3 stars.");
+            failures += Require(MatchManager.StarsFor(3, 2, 3) == 2, "A win with 3 right answers should earn 2 stars.");
+            failures += Require(MatchManager.StarsFor(2, 2, 3) == 1, "A draw should earn 1 star.");
+            failures += Require(MatchManager.StarsFor(2, 3, 2) == 1, "A loss with 2 right answers should earn 1 star.");
+            failures += Require(MatchManager.StarsFor(0, 5, 0) == 0, "A loss with no right answers should earn 0 stars.");
+            if (failures == 0) Debug.Log("[Verify] Stars: OK.");
+            return failures;
+        }
+
+        /// <summary>
+        /// The shared look: Fredoka on every piece of text, 9-sliced rounded
+        /// sprites, press feedback on every button, and the portal bridge plugin.
+        /// </summary>
+        static int CheckLook()
+        {
+            int failures = 0;
+
+            var texts = UnityEngine.Object.FindObjectsByType<Text>(FindObjectsInactive.Include);
+            foreach (var text in texts.Where(t => t.font == null || !t.font.name.StartsWith("Fredoka")))
+                failures += Require(false, $"Text '{text.name}' uses {(text.font != null ? text.font.name : "no font")}, not Fredoka.");
+            var meshes = UnityEngine.Object.FindObjectsByType<TextMesh>(FindObjectsInactive.Include);
+            foreach (var mesh in meshes.Where(t => t.font == null || !t.font.name.StartsWith("Fredoka")))
+                failures += Require(false, $"TextMesh '{mesh.name}' is not Fredoka.");
+            foreach (var text in texts.Where(t => t.horizontalOverflow == HorizontalWrapMode.Wrap))
+                failures += Require(false, $"Text '{text.name}' wraps by itself; Hebrew must be pre-wrapped with Rtl.Wrap.");
+
+            var buttons = UnityEngine.Object.FindObjectsByType<Button>(FindObjectsInactive.Include);
+            failures += Require(buttons.Length >= 5, $"Expected the 4 level buttons and Kick Off, found {buttons.Length} buttons.");
+            foreach (var button in buttons.Where(b => b.GetComponent<PressFeedback>() == null))
+                failures += Require(false, $"Button '{button.name}' has no PressFeedback.");
+
+            var images = UnityEngine.Object.FindObjectsByType<Image>(FindObjectsInactive.Include);
+            foreach (var name in new[] { "ScoreBar", "ProblemCard", "Card" })
+            {
+                var panel = images.FirstOrDefault(i => i.name == name);
+                failures += Require(panel != null && panel.sprite != null && panel.type == Image.Type.Sliced
+                                    && panel.sprite.border.x > 0f, $"{name} is not a 9-sliced rounded panel.");
+            }
+
+            var hud = UnityEngine.Object.FindAnyObjectByType<HudController>();
+            failures += Require(hud != null && hud.GetComponentInChildren<ResultPop>(true) != null, "No result word pop in the HUD.");
+            failures += Require(hud != null && hud.GetComponentInChildren<OverlayPop>(true) != null, "The overlay does not pop in.");
+            failures += Require(UnityEngine.Object.FindAnyObjectByType<MatchAudio>() != null, "No MatchAudio to play the press tick.");
+
+            var plugin = AssetImporter.GetAtPath("Assets/Plugins/WebGL/PortalBridge.jslib") as PluginImporter;
+            failures += Require(plugin != null && plugin.GetCompatibleWithPlatform(BuildTarget.WebGL),
+                "PortalBridge.jslib is missing or not enabled for WebGL.");
+            failures += Require(MatchManager.Slug == "math-strikers", "The portal slug must be math-strikers.");
+
+            if (failures == 0)
+                Debug.Log($"[Verify] Look: OK ({texts.Length} texts in Fredoka, {buttons.Length} buttons with press feedback, bridge plugin present).");
             return failures;
         }
 

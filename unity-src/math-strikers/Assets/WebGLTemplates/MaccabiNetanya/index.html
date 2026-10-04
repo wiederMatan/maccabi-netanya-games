@@ -51,28 +51,39 @@
       background: #001a3d;
     }
 
-    /* Both corner buttons are round symbols, no words, so they stay small. */
+    /* Both corner buttons are round chunky icons, like the rest of the site. */
     .back, .sound-toggle {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 40px;
-      height: 40px;
+      width: 44px;
+      height: 44px;
       padding: 0;
       border-radius: 50%;
-      border: 1.5px solid rgba(255, 204, 0, 0.55);
-      background: rgba(255, 255, 255, 0.10);
-      color: #ffe680;
-      font-weight: bold;
-      font-size: 1.3rem;
+      border: 3px solid #163679;
+      background: linear-gradient(180deg, #4d8dff, #2556c8);
+      box-shadow: 0 4px 0 #163679, inset 0 2px 0 rgba(255, 255, 255, 0.4);
+      color: #fff;
+      font-size: 21px;
       line-height: 1;
       text-decoration: none;
       cursor: pointer;
       touch-action: manipulation;
+      transition: transform 0.08s ease-out, box-shadow 0.08s ease-out;
     }
-    .sound-toggle { font-size: 1.15rem; }
-    .back:hover, .back:active,
-    .sound-toggle:hover, .sound-toggle:active { background: rgba(255, 204, 0, 0.22); }
+    .back:active, .sound-toggle:active {
+      transform: translateY(4px);
+      box-shadow: 0 0 0 #163679, inset 0 2px 0 rgba(255, 255, 255, 0.4);
+    }
+    svg.icon {
+      width: 1em;
+      height: 1em;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2.6;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
 
     #stage {
       position: absolute;
@@ -107,28 +118,64 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 18px;
-      background: linear-gradient(135deg, #001a3d 0%, #002b5c 100%);
+      gap: 16px;
+      background:
+        radial-gradient(120% 60% at 50% -10%, rgba(77, 141, 255, 0.35), transparent 60%),
+        linear-gradient(180deg, #0d2350 0%, #0a1a36 75%);
       text-align: center;
-      padding: 20px;
+      padding: 24px;
     }
 
-    #loading h2 { font-size: 1.5rem; color: #ffcc00; }
-    #loading p { color: #cfe0ff; font-size: 0.95rem; }
+    /* A ball bouncing on its shadow while the game loads. */
+    .loader-ball { position: relative; width: 84px; height: 120px; }
+    .loader-ball svg {
+      position: absolute; left: 12px; top: 0; width: 60px; height: 60px;
+      animation: ball-bounce 0.9s cubic-bezier(.5, 0, .5, 1) infinite alternate;
+    }
+    .loader-ball::after {
+      content: ""; position: absolute; left: 17px; bottom: 4px; width: 50px; height: 10px;
+      border-radius: 50%; background: rgba(0, 0, 0, 0.45);
+      animation: shadow-pulse 0.9s cubic-bezier(.5, 0, .5, 1) infinite alternate;
+    }
+    @keyframes ball-bounce { from { transform: translateY(0) rotate(0deg); } to { transform: translateY(52px) rotate(200deg); } }
+    @keyframes shadow-pulse { from { transform: scale(0.55); opacity: 0.5; } to { transform: scale(1); opacity: 1; } }
+
+    #loading h2 {
+      font-size: 1.7rem;
+      font-weight: 700;
+      color: #ffd23f;
+      text-shadow: -2px -2px 0 #8a5a00, 2px -2px 0 #8a5a00, -2px 2px 0 #8a5a00, 2px 2px 0 #8a5a00, 0 4px 0 #8a5a00;
+    }
+    #loading .tip {
+      max-width: 22em;
+      min-height: 2.6em;
+      color: #fff6dd;
+      font-size: 1rem;
+      line-height: 1.3;
+      transition: opacity 0.3s;
+    }
 
     #bar-track {
-      width: min(320px, 70vw);
-      height: 14px;
-      border-radius: 8px;
-      background: rgba(255, 255, 255, 0.14);
+      position: relative;
+      width: min(300px, 72vw);
+      height: 22px;
+      border-radius: 999px;
+      background: #10264d;
+      border: 3px solid #ffd23f;
+      box-shadow: 0 4px 0 #8a5a00;
       overflow: hidden;
     }
 
     #bar-fill {
       height: 100%;
       width: 0%;
-      background: #ffcc00;
+      background: repeating-linear-gradient(-45deg, #ffd23f 0 12px, #f2a900 12px 24px);
       transition: width 0.15s linear;
+    }
+
+    #bar-pct {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      font-size: 0.8rem; font-weight: 700; color: #0a1a36;
     }
 
     #error {
@@ -149,7 +196,7 @@
 <body>
   <div id="shell">
     <div class="corner">
-      <a class="back" href="../../index.html" aria-label="חזרה למשחקים">←</a>
+      <a class="back" href="../../index.html" aria-label="חזרה למשחקים"><svg class="icon" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></a>
       <button class="sound-toggle" id="sound-toggle" type="button"></button>
     </div>
 
@@ -158,9 +205,12 @@
         <canvas id="unity-canvas" width="{{{ WIDTH }}}" height="{{{ HEIGHT }}}" tabindex="-1"></canvas>
 
         <div id="loading">
-          <h2>טוען את המשחק…</h2>
-          <div id="bar-track"><div id="bar-fill"></div></div>
-          <p>הפעם הראשונה עשויה לקחת קצת יותר זמן</p>
+          <div class="loader-ball" aria-hidden="true">
+            <svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="29" fill="#fff" stroke="#0a1a36" stroke-width="4"/><path d="M32 18l12 9-5 14H25l-5-14z" fill="#0a1a36"/><path d="M32 18V5M44 27l12-5M39 41l8 11M25 41l-8 11M20 27L8 22" stroke="#0a1a36" stroke-width="4"/></svg>
+          </div>
+          <h2>טוען את המשחק</h2>
+          <div id="bar-track"><div id="bar-fill"></div><div id="bar-pct">0%</div></div>
+          <p class="tip" id="tip"></p>
         </div>
 
         <div id="error">
@@ -182,6 +232,25 @@
     var errorText = document.querySelector("#error-text");
     frame.appendChild(document.querySelector(".corner"));
     var game = null;
+
+    // Tips that rotate on the loading screen.
+    var tips = [
+      "מכבי נתניה נוסדה ב־1934, והצבעים שלה הם צהוב ושחור.",
+      "הקשב לקהל: כשמבקיעים, כל האצטדיון מריע!",
+      "אפשר להשתיק את הצלילים בכפתור הרמקול.",
+      "כל ניצחון מוסיף כוכבים לאוסף שלך בעמוד הראשי.",
+      "טיפ: בהתחלה קל יותר. כשמשתפרים, עולים רמה!"
+    ];
+    var tipEl = document.getElementById("tip");
+    var tipIndex = Math.floor(Math.random() * tips.length);
+    function nextTip() {
+      tipEl.style.opacity = 0;
+      setTimeout(function () { tipEl.textContent = tips[tipIndex++ % tips.length]; tipEl.style.opacity = 1; }, 250);
+    }
+    tipEl.textContent = tips[tipIndex++ % tips.length];
+    var tipTimer = setInterval(nextTip, 3200);
+    var barPct = document.getElementById("bar-pct");
+
 
     // The page's sound button mutes the game too; the choice is shared with the
     // other games and remembered.
@@ -268,10 +337,12 @@
     script.onload = function () {
       createUnityInstance(canvas, config, function (progress) {
         barFill.style.width = Math.round(progress * 100) + "%";
+        barPct.textContent = Math.round(progress * 100) + "%";
       }).then(function (instance) {
         game = instance;
         sendMute();
         loading.style.display = "none";
+        clearInterval(tipTimer);
         fit();
         canvas.focus();
       }).catch(function (message) {

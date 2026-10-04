@@ -1,4 +1,5 @@
 using System.Collections;
+using MaccabiShared;
 using UnityEngine;
 
 namespace MathStrikers
@@ -22,10 +23,19 @@ namespace MathStrikers
 
         public static MatchManager Instance { get; private set; }
 
+        /// <summary>The portal's slug for this game (localStorage keys, stars).</summary>
+        public const string Slug = "math-strikers";
+
+        public const string Title = "חלוצי החשבון";
+        public const string Intro =
+            "בכל בעיטה יש תרגיל חשבון. פותרים אותו ובוחרים את הלוח עם התשובה הנכונה, " +
+            "והכדור טס לשער! יש 30 שניות לכל בעיטה. במשחק 5 בעיטות – מבקיעים יותר מהיריבה ומנצחים!";
+        public const string KickOffLabel = "בעיטת פתיחה!";
+        const string NextMatchLabel = "למשחק הבא!";
+
         static readonly string[] Opponents =
         {
-            "Ironclad FC", "Vantage United", "Red Harbor",
-            "Solstice City", "Granite Rovers", "Meridian AC"
+            "הכרישים", "הנמרים", "הנשרים", "הזאבים", "הברקים", "הדובים"
         };
 
         [SerializeField] BallController ball;
@@ -42,20 +52,12 @@ namespace MathStrikers
             Difficulty.Starter, Difficulty.Rookie, Difficulty.Pro, Difficulty.Legend
         };
 
-        static readonly string[] TierBlurbs =
-        {
-            "Starter — adding and taking away, up to 20.",
-            "Easy — addition and subtraction.",
-            "Medium — adds multiplication.",
-            "Hard — multiplication and division."
-        };
-
-        // Boards sit on the grass now, so they need enough opacity to hold their
-        // own against the pitch behind them.
-        static readonly Color ZoneIdle = new Color(0.07f, 0.17f, 0.27f, 0.92f);
-        static readonly Color ZoneHover = new Color(0.91f, 0.71f, 0.30f, 0.96f);
-        static readonly Color ZoneRight = new Color(0.16f, 0.60f, 0.32f, 0.96f);
-        static readonly Color ZoneWrong = new Color(0.78f, 0.22f, 0.19f, 0.96f);
+        // The boards are lit 3D quads, so they are painted a shade brighter than
+        // the flat HUD colours they are meant to match.
+        static readonly Color ZoneIdle = Palette.Navy700;
+        static readonly Color ZoneHover = Palette.Gold400;
+        static readonly Color ZoneRight = Palette.Green400;
+        static readonly Color ZoneWrong = Palette.Red400;
 
         MathProblem problem;
         float timeLeft;
@@ -64,13 +66,12 @@ namespace MathStrikers
 
         int score;
         int streak;
+        int correctAnswers;
         int shotIndex;
         int matchIndex;
-        int matchesWon;
         int playerGoals;
         int opponentGoals;
         bool careerStarted;
-        SquadMember striker_;
         Animator strikerAnimator;
         Vector3 strikerHome;
         Quaternion strikerHomeRotation;
@@ -135,20 +136,15 @@ namespace MathStrikers
                     }
                 }
                 hud.HighlightDifficulty(System.Array.IndexOf(Tiers, difficulty));
-                PickStriker();
                 hud.SetScore(0);
                 hud.SetStreak(0);
                 hud.SetScoreline(0, 0);
-                hud.SetBanner("Career — warm up");
+                hud.SetBanner("משחק 1", $"נגד {CurrentOpponent}");
                 hud.SetProblem("");
-                hud.SetFeedback("");
+                hud.SetShot(0, ShotsPerMatch);
+                hud.ClearFeedback();
                 hud.SetTimer(AnswerSeconds, AnswerSeconds);
-                hud.ShowOverlay(
-                    "MATH STRIKERS",
-                    "Every shot brings a math problem and thirty seconds on the clock. " +
-                    "Solve it, then strike the panel holding the right answer — click it, " +
-                    "or press 1, 2 or 3. Outscore your opponent across five shots to take the match.",
-                    "Kick Off");
+                hud.ShowOverlay(Title, Intro, KickOffLabel);
             }
         }
 
@@ -182,46 +178,32 @@ namespace MathStrikers
 
             difficulty = Tiers[index];
             hud?.HighlightDifficulty(index);
-            hud?.SetBanner(TierBlurbs[index]);
         }
 
+        /// <summary>Each match is a round of its own: its score is what the portal keeps as a best.</summary>
         void OnStartPressed()
         {
-            if (!careerStarted)
-            {
-                careerStarted = true;
-                score = 0;
-                streak = 0;
-                matchIndex = 0;
-                matchesWon = 0;
-                hud?.SetScore(score);
-                hud?.SetStreak(streak);
-            }
-            else
-            {
-                matchIndex++;
-            }
-
+            if (careerStarted) matchIndex++;
+            careerStarted = true;
             StartMatch();
-        }
-
-        /// <summary>A different squad member takes the shots each match.</summary>
-        void PickStriker()
-        {
-            striker_ = Roster.Random();
-            hud?.SetStriker(striker_);
         }
 
         void StartMatch()
         {
-            PickStriker();
             shotIndex = 0;
             playerGoals = 0;
             opponentGoals = 0;
+            correctAnswers = 0;
+            score = 0;
+            streak = 0;
+
+            PortalBridge.MarkPlayed(Slug);
 
             hud?.HideOverlay();
+            hud?.SetScore(score);
+            hud?.SetStreak(streak);
             hud?.SetScoreline(0, 0);
-            hud?.SetBanner($"Match {matchIndex + 1} — vs {CurrentOpponent}");
+            hud?.SetBanner($"משחק {matchIndex + 1}", $"נגד {CurrentOpponent}");
             audio_?.PlayWhistle();
             NextShot();
         }
@@ -246,7 +228,8 @@ namespace MathStrikers
             shotInProgress = false;
 
             hud?.SetProblem($"{problem.Text} = ?");
-            hud?.SetFeedback("");
+            hud?.SetShot(shotIndex + 1, ShotsPerMatch);
+            hud?.ClearFeedback();
             hud?.SetTimer(timeLeft, AnswerSeconds);
         }
 
@@ -278,29 +261,39 @@ namespace MathStrikers
             bool saved = correct && keeperLane == zone.LaneIndex && Random.value < 0.25f;
 
             Vector3 target;
+            string resultWord;
+            Color resultColour;
+            if (correct) correctAnswers++;
 
             if (correct && !saved)
             {
                 int bonus = Mathf.RoundToInt(timeLeft);
-                score += 10 + streak * 2 + bonus;
+                int points = 10 + streak * 2 + bonus;
+                score += points;
                 streak++;
                 playerGoals++;
                 hud?.SetFeedback(streak >= 3
-                    ? $"GOAL! {striker_.Name} again — streak ×{streak}, +{10 + (streak - 1) * 2 + bonus} points"
-                    : $"GOAL! {striker_.Name} scores — +{10 + bonus} points");
+                    ? $"תשובה נכונה! רצף של {streak}, קיבלת {points} נקודות"
+                    : $"תשובה נכונה! קיבלת {points} נקודות", Palette.Green400);
+                resultWord = "גול!";
+                resultColour = Palette.Green400;
                 target = zone.AimPoint;
             }
             else if (saved)
             {
                 streak = 0;
-                hud?.SetFeedback($"{CurrentOpponent}'s keeper reads it — saved!");
+                hud?.SetFeedback($"תשובה נכונה, אבל השוער של {CurrentOpponent} הציל!", Palette.Gold400);
+                resultWord = "הצלה!";
+                resultColour = Palette.Gold400;
                 target = zone.AimPoint;
             }
             else
             {
                 streak = 0;
                 opponentGoals++;
-                hud?.SetFeedback($"Wrong — it was {problem.Answer}. The shot sails over.");
+                hud?.SetFeedback($"אופס! התשובה הנכונה היא {problem.Answer}", Palette.Red400);
+                resultWord = "החמצה";
+                resultColour = Palette.Red400;
                 // A wrong answer drags the strike high and wide of the frame.
                 target = zone.AimPoint + new Vector3(
                     Mathf.Sign(zone.AimPoint.x == 0f ? 1f : zone.AimPoint.x) * 1.4f, 2.4f, 0f);
@@ -309,7 +302,7 @@ namespace MathStrikers
             hud?.SetScore(score);
             hud?.SetStreak(streak);
             hud?.SetScoreline(playerGoals, opponentGoals);
-            StartCoroutine(RunUpAndStrike(target, keeperLane, correct && !saved));
+            StartCoroutine(RunUpAndStrike(target, keeperLane, correct && !saved, resultWord, resultColour));
         }
 
         void TimeUp()
@@ -328,7 +321,8 @@ namespace MathStrikers
             hud?.SetStreak(streak);
             hud?.SetScoreline(playerGoals, opponentGoals);
             hud?.SetTimer(0f, AnswerSeconds);
-            hud?.SetFeedback($"Out of time — it was {problem.Answer}. {CurrentOpponent} break away.");
+            hud?.SetFeedback($"נגמר הזמן! התשובה הנכונה היא {problem.Answer}", Palette.Red400);
+            hud?.ShowResult("נגמר הזמן!", Palette.Red400);
             audio_?.PlayMiss();
 
             StartCoroutine(AdvanceAfter(1.6f));
@@ -339,12 +333,13 @@ namespace MathStrikers
         /// then runs in and strikes. The ball only leaves the spot once the boot has
         /// had time to reach it, so the kick and the shot read as one action.
         /// </summary>
-        IEnumerator RunUpAndStrike(Vector3 target, int keeperLane, bool onTarget)
+        IEnumerator RunUpAndStrike(Vector3 target, int keeperLane, bool onTarget, string resultWord, Color resultColour)
         {
             if (striker == null)
             {
                 ball?.Strike(target);
                 keeper?.Dive(zones[keeperLane].AimPoint);
+                hud?.ShowResult(resultWord, resultColour);
                 yield break;
             }
 
@@ -384,6 +379,7 @@ namespace MathStrikers
             // the ball rather than with the boot.
             yield return new WaitForSeconds(0.55f);
             if (onTarget) audio_?.PlayGoal(); else audio_?.PlayMiss();
+            hud?.ShowResult(resultWord, resultColour);
         }
 
         IEnumerator WaitForKickContact()
@@ -427,7 +423,12 @@ namespace MathStrikers
             yield return new WaitForSeconds(delay);
 
             shotIndex++;
-            if (shotIndex >= ShotsPerMatch) EndMatch();
+            if (shotIndex >= ShotsPerMatch)
+            {
+                // Let the last result word have its moment before full time.
+                yield return new WaitForSeconds(1.1f);
+                EndMatch();
+            }
             else NextShot();
         }
 
@@ -448,21 +449,36 @@ namespace MathStrikers
             bool won = playerGoals > opponentGoals;
             bool drew = playerGoals == opponentGoals;
             audio_?.PlayFullTime(won || drew);
-            if (won) matchesWon++;
 
-            string verdict = won ? "Victory" : drew ? "Draw" : "Defeat";
+            int stars = StarsFor(playerGoals, opponentGoals, correctAnswers);
+            PortalBridge.AddStars(stars);
+            PortalBridge.ReportBest(Slug, score);
+
+            string verdict = won ? "ניצחון!" : drew ? "תיקו" : "הפסד";
             string nextOpponent = Opponents[(matchIndex + 1) % Opponents.Length];
 
             hud?.SetProblem("");
-            hud?.SetFeedback("");
-            hud?.SetBanner($"Full time — {verdict}");
+            hud?.SetShot(0, ShotsPerMatch);
+            hud?.ClearFeedback();
             hud?.ShowOverlay(
-                $"{verdict.ToUpperInvariant()}  {playerGoals}–{opponentGoals}",
-                $"You {playerGoals} – {opponentGoals} {CurrentOpponent}. " +
-                $"Career: {matchesWon} win{(matchesWon == 1 ? "" : "s")} from {matchIndex + 1} " +
-                $"match{(matchIndex == 0 ? "" : "es")}, {score} points banked. " +
-                $"Up next: {nextOpponent}.",
-                "Next Match");
+                verdict,
+                $"אנחנו {playerGoals}, {CurrentOpponent} {opponentGoals}\n" +
+                $"צברת {score} נקודות\n" +
+                $"המשחק הבא: נגד {nextOpponent}",
+                NextMatchLabel,
+                stars);
+        }
+
+        /// <summary>
+        /// Stars for a finished match: 3 for a win with at least 4 right answers,
+        /// 2 for any other win, 1 for a draw or for a loss with at least 2 right
+        /// answers, otherwise 0.
+        /// </summary>
+        public static int StarsFor(int playerGoals, int opponentGoals, int correctAnswers)
+        {
+            if (playerGoals > opponentGoals) return correctAnswers >= 4 ? 3 : 2;
+            if (playerGoals == opponentGoals) return 1;
+            return correctAnswers >= 2 ? 1 : 0;
         }
 
         public void Bind(BallController ballController, GoalkeeperController goalkeeper,

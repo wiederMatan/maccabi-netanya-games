@@ -42,18 +42,15 @@ namespace MathStrikers.EditorTools
                 hud.SetScore(140);
                 hud.SetStreak(3);
                 hud.SetScoreline(3, 1);
-                hud.SetBanner("Match 2 — vs Vantage United");
-                hud.SetFeedback("GOAL! Streak ×3 — +38 points");
+                hud.SetShot(3, MatchManager.ShotsPerMatch);
+                hud.SetBanner("משחק 2", "נגד הנמרים");
+                hud.SetFeedback("גול! קיבלת 38 נקודות", Palette.Green400);
                 hud.SetTimer(21f, MatchManager.AnswerSeconds);
-                hud.SetStriker(Roster.Squad[6]);
 
                 // -showOverlay captures the start menu instead of live play.
                 if (System.Array.IndexOf(System.Environment.GetCommandLineArgs(), "-showOverlay") >= 0)
                 {
-                    hud.ShowOverlay("MATH STRIKERS",
-                        "Every shot brings a math problem and thirty seconds on the clock. " +
-                        "Solve it, then strike the board holding the right answer.",
-                        "Kick Off");
+                    hud.ShowOverlay(MatchManager.Title, MatchManager.Intro, MatchManager.KickOffLabel);
                     hud.HighlightDifficulty(1);
                 }
                 else
