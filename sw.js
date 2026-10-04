@@ -2,7 +2,7 @@
 // portal and the memory game work with no network. The Unity build (~33MB) is
 // cached the first time it loads, so Math Strikers works offline after one play.
 // Its file names never change, so bump VERSION whenever a new build ships.
-const VERSION = 'v8';
+const VERSION = 'v9';
 const SHELL_CACHE = 'shell-' + VERSION;
 const GAME_CACHE = 'game-' + VERSION;
 
@@ -13,6 +13,10 @@ const SHELL = [
   "/portal.js",
   "/app.js",
   "/manifest.webmanifest",
+  "/fonts/fredoka.css",
+  "/fonts/fredoka-hebrew.woff2",
+  "/fonts/fredoka-latin.woff2",
+  "/fonts/fredoka-latin-ext.woff2",
   "/icons/icon.svg",
   "/icons/icon-192.png",
   "/icons/icon-512.png",

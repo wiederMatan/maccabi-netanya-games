@@ -788,10 +788,12 @@ namespace Juggling.EditorTools
 
         static Font BuiltinFont()
         {
-            // Unity renamed the bundled font; fall back for older editors.
-            var font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf")
-                       ?? Resources.GetBuiltinResource<Font>("Arial.ttf");
-            return font;
+            // Fredoka (Assets/Fonts, SIL Open Font License): rounded and friendly,
+            // the same face as the website. Falls back to Unity's bundled font.
+            var font = AssetDatabase.LoadAssetAtPath<Font>("Assets/Fonts/Fredoka-SemiBold.ttf");
+            if (font != null) return font;
+            return Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf")
+                   ?? Resources.GetBuiltinResource<Font>("Arial.ttf");
         }
 
         static void EnsureFolder(string path)
