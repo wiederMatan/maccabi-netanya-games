@@ -6,8 +6,8 @@ namespace Dribble
 {
     /// <summary>
     /// Owns every piece of on-screen text. The game pushes state in; this class
-    /// decides how it reads, animates the overlay and call-outs, and re-lays the
-    /// start / end card when the screen turns between portrait and landscape.
+    /// decides how it reads, animates the countdown, call-outs and end card, and
+    /// re-lays the card when the screen turns between portrait and landscape.
     ///
     /// All text is Hebrew. Unity's Text cannot lay out right-to-left, so every
     /// string goes through Rtl.Fix (one line) or Rtl.Wrap (a paragraph, wrapped
@@ -29,10 +29,11 @@ namespace Dribble
         public static readonly Color Gold400 = Hex(0xFFD23F);
 
         const float PopSeconds = 0.25f;
+        const int ToastSize = 84;
         const float DimAlpha = 0.72f;
         const float StarRevealGap = 0.28f;
         const int PortraitBodyChars = 30;
-        const int LandscapeBodyChars = 64;
+        const int LandscapeBodyChars = 60;
 
         [SerializeField] CanvasScaler scaler;
         [SerializeField] RectTransform counters;
@@ -50,19 +51,9 @@ namespace Dribble
         [SerializeField] RectTransform starRow;
         [SerializeField] Image[] starFills;
         [SerializeField] Text bodyText;
-        [SerializeField] Text captionText;
         [SerializeField] Button startButton;
         [SerializeField] Text startButtonLabel;
 
-        [SerializeField] Button[] difficultyButtons;
-        [SerializeField] Image[] difficultyFaces;
-        [SerializeField] Image[] difficultyEdges;
-        [SerializeField] Text[] difficultyLabels;
-        [SerializeField] Text[] difficultyHints;
-        [SerializeField] Sprite pickedFace;
-        [SerializeField] Sprite pickedEdge;
-        [SerializeField] Sprite restingFace;
-        [SerializeField] Sprite restingEdge;
 
         float toastShown;
         float toastUntil;
@@ -70,7 +61,6 @@ namespace Dribble
         float overlayShown = -10f;
         int starsEarned;
         int starsRevealed;
-        bool endMode;
         string bodyLogical = "";
         bool? portraitLayout;
 
@@ -79,7 +69,6 @@ namespace Dribble
         int shownStars = -1;
 
         public Button StartButton => startButton;
-        public Button[] DifficultyButtons => difficultyButtons;
         public bool OverlayVisible => overlay != null && overlay.activeSelf;
 
         /// <summary>Raised as each earned star lands on the end card, for its chime.</summary>
@@ -134,7 +123,7 @@ namespace Dribble
                 card.localScale = new Vector3(s, s, 1f);
             }
 
-            if (!endMode || starFills == null) return;
+            if (starFills == null) return;
             for (int i = 0; i < starFills.Length; i++)
             {
                 if (starFills[i] == null) continue;
@@ -164,11 +153,7 @@ namespace Dribble
             return Mathf.LerpUnclamped(from, 1f, eased);
         }
 
-        /// <summary>
-        /// Lay the card out for the current shape. Landscape puts the four levels
-        /// in a row; portrait stacks them two by two so each stays thumb sized.
-        /// Levels run right to left, the way Hebrew reads.
-        /// </summary>
+        /// <summary>Lay the end card out for the current shape.</summary>
         public void Layout(bool portrait)
         {
             portraitLayout = portrait;
@@ -194,28 +179,26 @@ namespace Dribble
 
             if (portrait)
             {
-                Place(card, 0f, 40f, 680f, 1010f);
-                Place(titleText, 0f, endMode ? 400f : 390f, 660f, 130f);
-                Place(starRow, 0f, 282f, 420f, 120f);
-                Place(bodyText, 0f, endMode ? 160f : 238f, 640f, endMode ? 110f : 190f);
-                Place(captionText, 0f, 62f, 640f, 46f);
-                Place(startButton, 0f, -362f, 440f, 116f);
+                Place(card, 0f, 20f, 660f, 780f);
+                Place(titleText, 0f, 280f, 640f, 130f);
+                Place(starRow, 0f, 145f, 420f, 120f);
+                Place(bodyText, 0f, 5f, 620f, 110f);
+                Place(startButton, 0f, -235f, 480f, 136f);
             }
             else
             {
-                // Short enough that the new-best badge on its top edge stays on screen.
-                Place(card, 0f, -12f, 1220f, 650f);
-                Place(titleText, 0f, endMode ? 258f : 245f, 1100f, 110f);
-                Place(starRow, 0f, 164f, 360f, 96f);
-                Place(bodyText, 0f, endMode ? 86f : 140f, 1140f, endMode ? 50f : 96f);
-                Place(captionText, 0f, endMode ? 36f : 52f, 640f, 40f);
-                Place(startButton, 0f, -222f, 420f, 108f);
+                Place(card, 0f, -12f, 1020f, 600f);
+                Place(titleText, 0f, 205f, 900f, 110f);
+                Place(starRow, 0f, 105f, 360f, 96f);
+                Place(bodyText, 0f, 10f, 980f, 50f);
+                Place(startButton, 0f, -170f, 460f, 124f);
             }
 
-            if (titleText != null) titleText.fontSize = portrait ? (endMode ? 92 : 108) : (endMode ? 84 : 100);
+            if (titleText != null) titleText.fontSize = portrait ? 96 : 88;
+            if (startButtonLabel != null) startButtonLabel.fontSize = portrait ? 56 : 52;
             if (bodyText != null)
             {
-                bodyText.fontSize = portrait ? 34 : (endMode ? 32 : 34);
+                bodyText.fontSize = portrait ? 34 : 32;
                 // Landscape is short on height, so a two-line result runs on as one.
                 string logical = portrait ? bodyLogical : bodyLogical.Replace("\n", "   ");
                 bodyText.text = Rtl.Wrap(logical, portrait ? PortraitBodyChars : LandscapeBodyChars);
@@ -231,18 +214,6 @@ namespace Dribble
                     star.anchoredPosition = new Vector2((1 - i) * slot * 1.18f, i == 1 ? slot * 0.12f : 0f);
                 }
             }
-
-            if (difficultyButtons != null)
-            {
-                for (int i = 0; i < difficultyButtons.Length; i++)
-                {
-                    if (difficultyButtons[i] == null) continue;
-                    if (portrait)
-                        Place(difficultyButtons[i], (i % 2 == 0 ? 1f : -1f) * 160f, i < 2 ? -40f : -172f, 300f, 116f);
-                    else
-                        Place(difficultyButtons[i], (1.5f - i) * 272f, endMode ? -50f : -46f, 252f, 116f);
-                }
-            }
         }
 
         static void Place(Component target, float x, float y, float width, float height)
@@ -252,25 +223,6 @@ namespace Dribble
             rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0.5f);
             rect.anchoredPosition = new Vector2(x, y);
             rect.sizeDelta = new Vector2(width, height);
-        }
-
-        /// <summary>Light up the chosen level so the current setting is never ambiguous.</summary>
-        public void HighlightDifficulty(int index)
-        {
-            if (difficultyFaces == null) return;
-
-            for (int i = 0; i < difficultyFaces.Length; i++)
-            {
-                bool picked = i == index;
-                if (difficultyFaces[i] != null) difficultyFaces[i].sprite = picked ? pickedFace : restingFace;
-                if (difficultyEdges != null && i < difficultyEdges.Length && difficultyEdges[i] != null)
-                    difficultyEdges[i].sprite = picked ? pickedEdge : restingEdge;
-                Color ink = picked ? Navy900 : Cream;
-                if (difficultyLabels != null && i < difficultyLabels.Length && difficultyLabels[i] != null)
-                    difficultyLabels[i].color = ink;
-                if (difficultyHints != null && i < difficultyHints.Length && difficultyHints[i] != null)
-                    difficultyHints[i].color = new Color(ink.r, ink.g, ink.b, 0.8f);
-            }
         }
 
         public void SetScore(int value)
@@ -299,6 +251,7 @@ namespace Dribble
         {
             if (toastText == null) return;
             toastText.text = Rtl.Fix(logical);
+            toastText.fontSize = ToastSize;
             toastText.enabled = true;
             SetAlpha(toastText, 1f);
             toastShown = Time.unscaledTime;
@@ -320,21 +273,16 @@ namespace Dribble
                 hintUntil = Mathf.Min(hintUntil, Time.unscaledTime + 0.6f);
         }
 
-        /// <summary>The start card: title, blurb, levels and the kick-off button.</summary>
-        public void ShowMenu(string title, string body, string buttonLabel)
+        /// <summary>The countdown before a run: one big number at a time, popping in.</summary>
+        public void Countdown(string logical)
         {
-            Show(false, title, body, buttonLabel, 0, false);
+            Toast(logical, 0.72f);
+            if (toastText != null) toastText.fontSize = 180;
         }
 
         /// <summary>The end card, with the stars the run earned and a badge for a new best.</summary>
         public void ShowEnd(string title, string body, string buttonLabel, int stars, bool newBest)
         {
-            Show(true, title, body, buttonLabel, stars, newBest);
-        }
-
-        void Show(bool end, string title, string body, string buttonLabel, int stars, bool newBest)
-        {
-            endMode = end;
             starsEarned = Mathf.Clamp(stars, 0, 3);
             starsRevealed = 0;
             bodyLogical = body ?? "";
@@ -342,8 +290,7 @@ namespace Dribble
             if (overlay != null) overlay.SetActive(true);
             // The card says everything the counters do, and the title needs the room.
             if (counters != null) counters.gameObject.SetActive(false);
-            if (starRow != null) starRow.gameObject.SetActive(end);
-            if (badge != null) badge.SetActive(end && newBest);
+            if (badge != null) badge.SetActive(newBest);
             if (starFills != null)
                 foreach (var fill in starFills) if (fill != null) fill.enabled = false;
 

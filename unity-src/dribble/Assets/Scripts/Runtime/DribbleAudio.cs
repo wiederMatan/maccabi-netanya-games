@@ -9,6 +9,12 @@ namespace Dribble
     /// the README). The star chime, the cone knock, the lane swoosh and the ball
     /// touches are synthesised, and every recording falls back to a synthesised
     /// stand-in if its clip is missing, so the run is never silent.
+    ///
+    /// Music is the club's own (CC0, Resources/Audio/Music): a stadium anthem loops
+    /// behind the end card, supporters' drums loop under the crowd during
+    /// a run and quicken with the speed, and short stings mark milestones and the
+    /// end of a run. Everything plays through the AudioListener, so SetMuted
+    /// silences the music too.
     /// </summary>
     [RequireComponent(typeof(AudioSource))]
     public class DribbleAudio : MonoBehaviour
@@ -20,6 +26,26 @@ namespace Dribble
         AudioSource source;
         AudioSource crowdSource;
         Coroutine crowdRamp;
+
+        const float AnthemVolume = 0.3f;
+        const float DrumsVolume = 0.22f;
+        const float MusicFadeSeconds = 0.8f;
+        const float DrumsTopPitch = 1.12f;
+
+        /// <summary>The music clips and whether each one loops. Checked by VerifyScene.</summary>
+        public static readonly (string clip, bool loop)[] Music =
+        {
+            ("MusicAnthem", true), ("MusicDrums", true), ("MusicGoal", false),
+            ("MusicWin", false), ("MusicStar", false), ("MusicTryAgain", false)
+        };
+
+        AudioSource anthemSource;
+        AudioSource drumsSource;
+        Coroutine anthemFade;
+        Coroutine drumsFade;
+        AudioClip goalSting;
+        AudioClip winSting;
+        AudioClip tryAgainSting;
 
         AudioClip chime;
         AudioClip tick;
@@ -58,6 +84,12 @@ namespace Dribble
             whistle = Load("Whistle") ?? BuildWhistle();
             applause = Load("Applause");
 
+            anthemSource = LoopSource(Load("Music/MusicAnthem"));
+            drumsSource = LoopSource(Load("Music/MusicDrums"));
+            goalSting = Load("Music/MusicGoal");
+            winSting = Load("Music/MusicWin");
+            tryAgainSting = Load("Music/MusicTryAgain");
+
             var crowd = Load("Crowd");
             if (crowd != null)
             {
@@ -70,7 +102,87 @@ namespace Dribble
             }
         }
 
-        static AudioClip Load(string name) => Resources.Load<AudioClip>("Audio/" + name);
+        public static AudioClip Load(string name) => Resources.Load<AudioClip>("Audio/" + name);
+
+        AudioSource LoopSource(AudioClip clip)
+        {
+            if (clip == null) return null;
+            var loop = gameObject.AddComponent<AudioSource>();
+            loop.clip = clip;
+            loop.loop = true;
+            loop.playOnAwake = false;
+            loop.spatialBlend = 0f;
+            loop.volume = 0f;
+            return loop;
+        }
+
+        /// <summary>The anthem behind the start and end cards.</summary>
+        public void PlayMenuMusic()
+        {
+            FadeMusic(anthemSource, ref anthemFade, AnthemVolume, MusicFadeSeconds);
+            FadeMusic(drumsSource, ref drumsFade, 0f, 0.3f);
+        }
+
+        /// <summary>The next run is being counted in: the anthem bows out.</summary>
+        public void FadeOutMenuMusic() => FadeMusic(anthemSource, ref anthemFade, 0f, MusicFadeSeconds);
+
+        /// <summary>A countdown beep: a short chime for 3, 2, 1, and a higher one for "go".</summary>
+        public void PlayCount(bool go) => Play(chime, go ? 0.55f : 0.35f, go ? 1.5f : 0.75f);
+
+        /// <summary>Kick-off: the anthem gives way to the supporters' drums.</summary>
+        public void PlayRunMusic()
+        {
+            FadeMusic(anthemSource, ref anthemFade, 0f, MusicFadeSeconds);
+            if (drumsSource != null)
+            {
+                drumsSource.pitch = 1f;
+                drumsSource.time = 0f;
+            }
+            FadeMusic(drumsSource, ref drumsFade, DrumsVolume, 0.4f);
+        }
+
+        /// <summary>
+        /// The drums quicken with the run: 0 is the level's start speed, 1 its top
+        /// speed. The rise is gentle, so the beat still sits under the crowd.
+        /// </summary>
+        public void SetRunTempo(float progress)
+        {
+            if (drumsSource != null) drumsSource.pitch = Mathf.Lerp(1f, DrumsTopPitch, Mathf.Clamp01(progress));
+        }
+
+        /// <summary>The run is over: the drums stop under the tackle.</summary>
+        public void StopRunMusic() => FadeMusic(drumsSource, ref drumsFade, 0f, 0.3f);
+
+        /// <summary>
+        /// As the end card appears: a fanfare for three stars, the goal sting for two,
+        /// a "nearly!" for one, and the anthem comes back in underneath.
+        /// </summary>
+        public void PlayResult(int stars)
+        {
+            var sting = stars >= 3 ? winSting : stars == 2 ? goalSting : tryAgainSting;
+            Play(sting, 0.75f);
+            PlayMenuMusic();
+        }
+
+        void FadeMusic(AudioSource music, ref Coroutine fade, float target, float seconds)
+        {
+            if (music == null) return;
+            if (fade != null) StopCoroutine(fade);
+            if (target > 0f && !music.isPlaying) music.Play();
+            fade = StartCoroutine(FadeTo(music, target, seconds));
+        }
+
+        IEnumerator FadeTo(AudioSource music, float target, float seconds)
+        {
+            float from = music.volume;
+            for (float t = 0f; t < seconds; t += Time.unscaledDeltaTime)
+            {
+                music.volume = Mathf.Lerp(from, target, t / seconds);
+                yield return null;
+            }
+            music.volume = target;
+            if (target <= 0f) music.Pause();
+        }
 
         /// <summary>
         /// A star. Each one in a row rings a step higher, so a line of stars plays
@@ -95,10 +207,11 @@ namespace Dribble
             StartCrowd();
         }
 
-        /// <summary>Every hundred metres the crowd cheers the run on.</summary>
+        /// <summary>Every hundred metres, and a new best mid-run: the goal sting over a cheer.</summary>
         public void PlayMilestone()
         {
-            Play(cheer, 0.55f);
+            Play(goalSting, 0.6f);
+            Play(cheer, 0.3f);
             SwellCrowd();
         }
 
@@ -119,7 +232,8 @@ namespace Dribble
             Play(whistle, 0.55f, 1.05f);
             if (!newBest) yield break;
             yield return new WaitForSeconds(1.1f);
-            if (applause != null) Play(applause, 0.8f); else Play(cheer, 0.7f);
+            // Kept under the end-of-run music sting that lands just after.
+            if (applause != null) Play(applause, 0.5f); else Play(cheer, 0.45f);
             SwellCrowd();
         }
 

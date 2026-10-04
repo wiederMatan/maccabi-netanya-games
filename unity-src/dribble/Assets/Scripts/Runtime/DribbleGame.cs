@@ -5,14 +5,16 @@ using UnityEngine;
 namespace Dribble
 {
     /// <summary>
-    /// The game loop. A run starts on the overlay, speeds up as it goes, collects
-    /// stars and ends when a defender wins the ball. Cones are forgiving: knocking
+    /// The game loop. There are no levels: as soon as the game loads a short
+    /// countdown runs over the pitch and the run starts by itself. It speeds up
+    /// along one progression (Progression), collects stars and ends when a
+    /// defender wins the ball; the end card's one button counts down the next run. Cones are forgiving: knocking
     /// one over only costs some speed. Everything else in the scene reacts to this
     /// class.
     ///
     /// Progress is shared with the website through PortalBridge: the game is
     /// marked played when a run starts, and each finished run adds 1-3 stars to
-    /// the portal's total (Tiers.StarScores) and reports the score as a best.
+    /// the portal's total (Progression.StarsFor) and reports the score as a best.
     /// </summary>
     public class DribbleGame : MonoBehaviour
     {
@@ -31,19 +33,19 @@ namespace Dribble
         // A knocked cone costs this share of the speed, but never drops below the start speed.
         const float ConeSlowdown = 0.25f;
         const float EndOverlayDelay = 1.7f;
-        const string BestKeyPrefix = "dribble.best.";
+        const string BestKey = "dribble.best";
+        const float CountdownStep = 0.75f;
 
         [SerializeField] Course course;
         [SerializeField] Runner runner;
         [SerializeField] HudController hud;
         [SerializeField] DribbleAudio audio_;
         [SerializeField] CameraFramer framer;
-        [SerializeField] Difficulty difficulty = Difficulty.Starter;
 
         readonly LaneInput input = new LaneInput();
 
-        TierSettings tier;
         bool running;
+        bool countingDown;
         float runTime;
         float speed;
         // Speed lost to cones, recovered gradually.
@@ -56,6 +58,7 @@ namespace Dribble
         bool steered;
         int bestAtStart;
         bool bestCalled;
+        bool autopilot;
         int laneChanges;
         int conesHit;
 
@@ -64,7 +67,6 @@ namespace Dribble
         public float Distance => distance;
         public int Stars => stars;
         public int Score => Mathf.FloorToInt(distance) + stars * StarPoints;
-        public Difficulty CurrentDifficulty => difficulty;
 
         public void Bind(Course pitch, Runner player, HudController hudController, DribbleAudio audio, CameraFramer cameraFramer)
         {
@@ -82,52 +84,72 @@ namespace Dribble
             if (runner != null) runner.Touched += () => audio_?.PlayTouch();
             if (hud != null) hud.StarRevealed += i => audio_?.PlayStar(i);
 
-            if (hud != null)
+            hud?.StartButton?.onClick.AddListener(PlayAgain);
+            PlayAgain();
+        }
+
+        /// <summary>Set the pitch up afresh and count the next run in.</summary>
+        public void PlayAgain()
+        {
+            if (running || countingDown) return;
+            StopAllCoroutines();
+            StartCoroutine(CountdownThenRun());
+        }
+
+        /// <summary>
+        /// "3, 2, 1, יאללה!" over the pitch, with the runner waiting on the ball,
+        /// then the run starts by itself - no button to find first.
+        /// </summary>
+        IEnumerator CountdownThenRun()
+        {
+            countingDown = true;
+            course.Begin(Progression.StartSpeed);
+            runner.ResetToStart();
+            hud?.HideOverlay();
+            hud?.SetScore(0);
+            hud?.SetDistance(0);
+            hud?.SetStars(0);
+            audio_?.FadeOutMenuMusic();
+
+            // The first frames after loading can stall for a moment; let them pass
+            // so the "3" is not swallowed.
+            yield return null;
+            yield return new WaitForSeconds(0.4f);
+
+            foreach (var count in new[] { "3", "2", "1" })
             {
-                hud.StartButton?.onClick.AddListener(StartRun);
-
-                var tierButtons = hud.DifficultyButtons;
-                if (tierButtons != null)
-                {
-                    for (int i = 0; i < tierButtons.Length && i < Tiers.All.Length; i++)
-                    {
-                        int index = i;
-                        tierButtons[i]?.onClick.AddListener(() => SelectDifficulty(index));
-                    }
-                }
-
-                hud.HighlightDifficulty(System.Array.IndexOf(Tiers.All, difficulty));
-                hud.SetScore(0);
-                hud.SetDistance(0);
-                hud.SetStars(0);
-                hud.ShowMenu(
-                    "כדרור!",
-                    "רוץ עם הכדור לאורך המגרש! החלק או הקש ימינה ושמאלה " +
-                    "כדי לעקוף את המגינים, ואסוף כוכבים.",
-                    "בעיטת פתיחה!");
+                hud?.Countdown(count);
+                audio_?.PlayCount(false);
+                yield return new WaitForSeconds(CountdownStep);
             }
+            hud?.Countdown("יאללה!");
+            audio_?.PlayCount(true);
+            countingDown = false;
+            StartRun();
 
-            tier = Tiers.For(difficulty);
-            course?.Begin(tier, tier.StartSpeed);
+            // The steering tip once "יאללה!" has had the screen to itself.
+            yield return new WaitForSeconds(0.8f);
+            if (running && !steered) hud?.ShowHint("החלק או הקש ימינה ושמאלה", 5f);
         }
 
         void Update()
         {
             if (!running)
             {
-                // Space or Enter starts a run from the overlay too.
+                // Space or Enter plays again from the end card too.
                 if (hud != null && hud.OverlayVisible &&
                     (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return)))
-                    StartRun();
+                    PlayAgain();
                 return;
             }
 
             float dt = Time.deltaTime;
             runTime += dt;
             speedPenalty = Mathf.MoveTowards(speedPenalty, 0f, 0.6f * dt);
-            speed = Mathf.Max(tier.StartSpeed * 0.8f, tier.SpeedAt(runTime) - speedPenalty);
+            speed = Mathf.Max(Progression.StartSpeed * 0.8f, Progression.SpeedAt(runTime) - speedPenalty);
+            audio_?.SetRunTempo(Progression.Intensity(speed));
 
-            int move = input.Poll();
+            int move = autopilot ? AutopilotMove() : input.Poll();
             if (move != 0 && runner.Shift(move))
             {
                 laneChanges++;
@@ -224,21 +246,22 @@ namespace Dribble
             int score = Score;
             hud?.SetDistance(Mathf.FloorToInt(distance));
             hud?.SetScore(score);
-            Debug.Log($"[Dribble] Run over on {difficulty}: {Mathf.FloorToInt(distance)} m, {stars} stars, " +
-                      $"score {score}, {laneChanges} lane changes, {conesHit} cones, top speed {speed:0.0} m/s");
-            int best = Best(difficulty);
+            Debug.Log($"[Dribble] Run over after {runTime:0}s: {Mathf.FloorToInt(distance)} m, {stars} stars, " +
+                      $"score {score}, {laneChanges} lane changes, {conesHit} cones, speed {speed:0.0} m/s");
+            int best = Best();
             bool newBest = score > best;
             if (newBest)
             {
-                PlayerPrefs.SetInt(BestKeyPrefix + difficulty, score);
+                PlayerPrefs.SetInt(BestKey, score);
                 PlayerPrefs.Save();
             }
 
             // Recorded straight away, so leaving during the replay loses nothing.
-            int earned = Tiers.StarsFor(difficulty, score);
+            int earned = Progression.StarsFor(score);
             PortalBridge.AddStars(earned);
             PortalBridge.ReportBest(Slug, score);
 
+            audio_?.StopRunMusic();
             audio_?.PlayTackle(newBest);
             hud?.Toast("אוי!", 1.2f);
             StartCoroutine(ShowEnd(score, earned, newBest));
@@ -251,27 +274,18 @@ namespace Dribble
             int metres = Mathf.FloorToInt(distance);
             string title = earned == 3 ? "מדהים!" : earned == 2 ? "כל הכבוד!" : "יפה מאוד!";
             string collected = stars == 0 ? "ולא אספת כוכבים" : stars == 1 ? "ואספת כוכב אחד" : $"ואספת {stars} כוכבים";
+            audio_?.PlayResult(earned);
             hud?.ShowEnd(title,
-                $"כדררת {metres}\u00A0מ' {collected}.\nנקודות: {score}, שיא: {Best(difficulty)}",
+                $"כדררת {metres}\u00A0מ' {collected}.\nנקודות: {score}, שיא: {Best()}",
                 "שחק שוב", earned, newBest);
         }
 
-        /// <summary>Overlay level picker. Takes effect from the next run.</summary>
-        void SelectDifficulty(int index)
-        {
-            if (index < 0 || index >= Tiers.All.Length) return;
-            difficulty = Tiers.All[index];
-            hud?.HighlightDifficulty(index);
-        }
-
-        public void StartRun()
+        void StartRun()
         {
             if (running) return;
-            StopAllCoroutines();
 
-            tier = Tiers.For(difficulty);
             runTime = 0f;
-            speed = tier.StartSpeed;
+            speed = Progression.StartSpeed;
             speedPenalty = 0f;
             distance = 0f;
             stars = 0;
@@ -281,23 +295,51 @@ namespace Dribble
             laneChanges = 0;
             conesHit = 0;
 
-            course.Begin(tier, speed);
-            runner.ResetToStart();
             runner.StartRunning();
             input.Reset();
             running = true;
+            Debug.Log("[Dribble] Run started");
 
-            hud?.HideOverlay();
-            hud?.SetScore(0);
-            hud?.SetDistance(0);
-            hud?.SetStars(0);
-            hud?.ShowHint("החלק או הקש ימינה ושמאלה", 6f);
-            bestAtStart = Best(difficulty);
+            bestAtStart = Best();
             bestCalled = false;
             PortalBridge.MarkPlayed(Slug);
             audio_?.PlayKickOff();
+            audio_?.PlayRunMusic();
         }
 
-        static int Best(Difficulty level) => PlayerPrefs.GetInt(BestKeyPrefix + level, 0);
+        /// <summary>
+        /// Test hook for the browser checks: SendMessage("DribbleGame", "Autopilot", "1")
+        /// steers round every blocker so a scripted run can last as long as it needs
+        /// (to reach a milestone or a star threshold); "0" hands control back.
+        /// </summary>
+        public void Autopilot(string on) => autopilot = on == "1";
+
+        int AutopilotMove()
+        {
+            int lane = runner.Lane;
+            if (Clearance(lane) > 2.2f * speed) return 0;
+            // Head for the lane with the most room ahead, a step at a time.
+            int best = lane;
+            for (int other = 0; other < CourseGenerator.LaneCount; other++)
+                if (Clearance(other) > Clearance(best) + 0.5f) best = other;
+            return best == lane ? 0 : best > lane ? 1 : -1;
+        }
+
+        /// <summary>Metres to the nearest blocker ahead in a lane.</summary>
+        float Clearance(int lane)
+        {
+            float nearest = float.MaxValue;
+            var items = course.Active;
+            for (int i = 0; i < items.Count; i++)
+            {
+                var item = items[i];
+                if (item.Kind == ItemKind.Star || item.Spent || item.Lane != lane) continue;
+                float z = item.transform.localPosition.z;
+                if (z > -0.4f && z < nearest) nearest = z;
+            }
+            return nearest;
+        }
+
+        static int Best() => PlayerPrefs.GetInt(BestKey, 0);
     }
 }

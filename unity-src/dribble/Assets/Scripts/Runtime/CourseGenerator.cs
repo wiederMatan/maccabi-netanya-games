@@ -23,7 +23,7 @@ namespace Dribble
         const float StarRowChance = 0.75f;
         const float BonusStarChance = 0.4f;
 
-        public static CourseRow Next(TierSettings tier, System.Random random)
+        public static CourseRow Next(Pace tier, System.Random random)
         {
             var row = new CourseRow { Lanes = new Blocker[LaneCount], StarLane = -1, BonusStarLane = -1 };
 

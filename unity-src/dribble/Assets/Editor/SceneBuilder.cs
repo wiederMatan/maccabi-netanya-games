@@ -474,7 +474,7 @@ namespace Dribble.EditorTools
             var panel = SlicedImage(card, "Panel", UiKit.Panel, Color.white);
             Fill(panel.rectTransform, 0f, 0f);
 
-            var title = Label(card, "Title", Rtl.Fix("כדרור!"), font, 108, UiKit.Gold400, TextAnchor.MiddleCenter);
+            var title = Label(card, "Title", Rtl.Fix("כל הכבוד!"), font, 96, UiKit.Gold400, TextAnchor.MiddleCenter);
             TitleEffects(title);
 
             // A red "new best" badge riding the top edge of the card.
@@ -501,38 +501,12 @@ namespace Dribble.EditorTools
                 fill.enabled = false;
                 starFills[i] = fill;
             }
-            starRow.gameObject.SetActive(false);
 
             var body = Label(card, "Body", "", font, 34, UiKit.Cream, TextAnchor.MiddleCenter);
             body.lineSpacing = 1.05f;
 
-            var caption = Label(card, "LevelCaption", Rtl.Fix("בחר רמה"), font, 32,
-                new Color(UiKit.Cream.r, UiKit.Cream.g, UiKit.Cream.b, 0.75f), TextAnchor.MiddleCenter);
-
-            int levels = Tiers.All.Length;
-            var tierButtons = new Button[levels];
-            var tierFaces = new Image[levels];
-            var tierEdges = new Image[levels];
-            var tierLabels = new Text[levels];
-            var tierHints = new Text[levels];
-
-            for (int i = 0; i < levels; i++)
-            {
-                var (tierButton, face, edge) = GameButton(card, $"Level{Tiers.Ids[i]}", UiKit.NavyFace, UiKit.NavyEdge);
-                var label = Label(face.transform, "Label", Rtl.Fix(Tiers.Names[i]), font, 40, UiKit.Cream, TextAnchor.MiddleCenter);
-                Stretch(label, 0.42f, 0.98f);
-                var levelHint = Label(face.transform, "Hint", Rtl.Fix(Tiers.Hints[i]), font, 28, UiKit.Cream, TextAnchor.MiddleCenter);
-                Stretch(levelHint, 0.06f, 0.46f);
-
-                tierButtons[i] = tierButton;
-                tierFaces[i] = face;
-                tierEdges[i] = edge;
-                tierLabels[i] = label;
-                tierHints[i] = levelHint;
-            }
-
             var (button, startFace, _) = GameButton(card, "StartButton", UiKit.GoldFace, UiKit.GoldEdge);
-            var buttonLabel = Label(startFace.transform, "Label", Rtl.Fix("בעיטת פתיחה!"), font, 46,
+            var buttonLabel = Label(startFace.transform, "Label", Rtl.Fix("שחק שוב"), font, 56,
                 UiKit.Navy900, TextAnchor.MiddleCenter);
             Fill(buttonLabel.rectTransform, 0f, 0f);
             buttonLabel.rectTransform.anchoredPosition = new Vector2(0f, 2f);
@@ -554,22 +528,13 @@ namespace Dribble.EditorTools
             Wire(wiring, "starRow", starRow);
             Wire(wiring, "starFills", starFills);
             Wire(wiring, "bodyText", body);
-            Wire(wiring, "captionText", caption);
             Wire(wiring, "startButton", button);
             Wire(wiring, "startButtonLabel", buttonLabel);
-            Wire(wiring, "difficultyButtons", tierButtons);
-            Wire(wiring, "difficultyFaces", tierFaces);
-            Wire(wiring, "difficultyEdges", tierEdges);
-            Wire(wiring, "difficultyLabels", tierLabels);
-            Wire(wiring, "difficultyHints", tierHints);
-            Wire(wiring, "pickedFace", UiKit.GoldFace);
-            Wire(wiring, "pickedEdge", UiKit.GoldEdge);
-            Wire(wiring, "restingFace", UiKit.NavyFace);
-            Wire(wiring, "restingEdge", UiKit.NavyEdge);
             wiring.ApplyModifiedPropertiesWithoutUndo();
 
-            hud.HighlightDifficulty(0);
             hud.Layout(false);
+            // The game opens on the countdown; the card only appears after a run.
+            overlay.SetActive(false);
             EditorUtility.SetDirty(hud);
             return hud;
         }

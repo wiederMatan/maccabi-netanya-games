@@ -26,7 +26,7 @@ namespace Dribble.EditorTools
             int failures = 0;
 
             failures += CheckRtl();
-            failures += CheckTiers();
+            failures += CheckProgression();
             failures += CheckGenerator();
             failures += CheckSceneWiring();
             failures += CheckCourseSimulation();
@@ -99,81 +99,86 @@ namespace Dribble.EditorTools
             failures += Require(game.Contains("PortalBridge.ReportBest(Slug, score)"), "Finished runs do not report the best.");
             failures += Require(feedback.Contains("PortalBridge.Haptic(10)"), "Button presses do not buzz.");
 
-            foreach (var difficulty in Tiers.All)
+            int last = 0;
+            for (int score = 0; score <= 3000; score += 5)
             {
-                int last = 0;
-                for (int score = 0; score <= 2000; score += 5)
+                int stars = Progression.StarsFor(score);
+                if (stars < 1 || stars > 3 || stars < last)
                 {
-                    int stars = Tiers.StarsFor(difficulty, score);
-                    if (stars < 1 || stars > 3 || stars < last)
-                    {
-                        failures += Require(false, $"{difficulty}: {stars} stars for {score} points.");
-                        break;
-                    }
-                    last = stars;
+                    failures += Require(false, $"{stars} stars for {score} points.");
+                    break;
                 }
-                failures += Require(Tiers.StarsFor(difficulty, 0) == 1 && Tiers.StarsFor(difficulty, 5000) == 3,
-                    $"{difficulty}: star thresholds do not span 1 to 3.");
+                last = stars;
             }
+            failures += Require(Progression.StarsFor(0) == 1 && Progression.StarsFor(Progression.TwoStarScore) == 2 &&
+                                Progression.StarsFor(Progression.ThreeStarScore) == 3,
+                $"Star thresholds do not run 1 to 3 (2 stars at {Progression.TwoStarScore}, 3 at {Progression.ThreeStarScore}).");
+            failures += Require(Progression.TwoStarScore == 250 && Progression.ThreeStarScore == 650,
+                "Star thresholds changed - update this check and the README together.");
 
             if (failures == 0) Debug.Log("[Verify] Portal bridge and star awards: OK.");
             return failures;
         }
 
-        /// <summary>Each level is a step up from the one before, and Starter is gentle.</summary>
-        static int CheckTiers()
+        /// <summary>
+        /// The one progression: starts at a brisk jog, only ever speeds up, reaches
+        /// top speed within 75 s, and the pitch gets busier as it does - from one
+        /// blocker at a time to mostly two - while rows stay far enough apart to dodge.
+        /// </summary>
+        static int CheckProgression()
         {
             int failures = 0;
-            var all = Tiers.All.Select(Tiers.For).ToArray();
+            failures += Require(Mathf.Abs(Progression.SpeedAt(0f) - 5.5f) < 0.01f, "The run does not start at 5.5 m/s.");
+            failures += Require(Progression.SpeedAt(75f) >= Progression.MaxSpeed - 0.001f, "Top speed is not reached within 75 s.");
+            failures += Require(Progression.MaxSpeed >= 14.5f, "Top speed is below 15 m/s.");
 
-            failures += Require(Tiers.Names.Length == Tiers.All.Length && Tiers.Hints.Length == Tiers.All.Length && Tiers.Ids.Length == Tiers.All.Length,
-                "Every level needs a name and a hint.");
-
-            for (int i = 1; i < all.Length; i++)
+            float lastSpeed = 0f, lastGap = float.MaxValue, lastDouble = -1f;
+            for (float t = 0f; t <= 120f; t += 0.5f)
             {
-                failures += Require(all[i].StartSpeed > all[i - 1].StartSpeed, $"{Tiers.All[i]} does not start faster than {Tiers.All[i - 1]}.");
-                failures += Require(all[i].Acceleration > all[i - 1].Acceleration, $"{Tiers.All[i]} does not ramp faster than {Tiers.All[i - 1]}.");
-                failures += Require(all[i].RowGapSeconds < all[i - 1].RowGapSeconds, $"{Tiers.All[i]} is not busier than {Tiers.All[i - 1]}.");
+                float speed = Progression.SpeedAt(t);
+                var pace = Progression.PaceAt(speed);
+                if (speed < lastSpeed || pace.RowGapSeconds > lastGap + 1e-5f || pace.DoubleBlockChance < lastDouble - 1e-5f)
+                {
+                    failures += Require(false, $"The progression goes backwards at {t}s.");
+                    break;
+                }
+                failures += Require(pace.RowGapSeconds >= 1.2f, $"Rows are too close together to dodge at {t}s.");
+                lastSpeed = speed; lastGap = pace.RowGapSeconds; lastDouble = pace.DoubleBlockChance;
             }
 
-            foreach (var tier in all)
-            {
-                failures += Require(tier.SpeedAt(0f) == tier.StartSpeed, "SpeedAt(0) is not the start speed.");
-                failures += Require(Mathf.Approximately(tier.SpeedAt(10000f), tier.MaxSpeed), "Speed is not capped.");
-                // At top speed, the gap between rows must still leave time for two lane changes.
-                failures += Require(tier.RowGapSeconds >= 1.2f, "Rows are too close together to dodge.");
-            }
+            var opening = Progression.PaceAt(Progression.StartSpeed);
+            var top = Progression.PaceAt(Progression.MaxSpeed);
+            failures += Require(opening.DoubleBlockChance == 0f, "The opening should only ever block one lane at a time.");
+            failures += Require(top.DoubleBlockChance >= 0.5f && top.RowGapSeconds <= 1.5f, "Top speed is not as busy as the old Hard level.");
 
-            var starter = Tiers.For(Difficulty.Starter);
-            failures += Require(starter.StartSpeed <= 5f, "Starter is too fast for a six year old.");
-            failures += Require(starter.DoubleBlockChance == 0f, "Starter should only ever block one lane at a time.");
-
-            if (failures == 0) Debug.Log("[Verify] Levels: OK.");
+            if (failures == 0) Debug.Log($"[Verify] Progression: OK ({Progression.StartSpeed} to {Progression.MaxSpeed} m/s in {(Progression.MaxSpeed - Progression.StartSpeed) / Progression.Acceleration:0} s).");
             return failures;
         }
 
         /// <summary>
-        /// Thousands of rows per level: a lane is always left open, stars never sit
-        /// on a blocker, and each level blocks about as often as it promises.
+        /// Thousands of rows across the progression: a lane is always left open,
+        /// stars never sit on a blocker, and the pitch blocks about as often as the
+        /// progression promises at each speed.
         /// </summary>
         static int CheckGenerator()
         {
             int failures = 0;
             const int rows = 5000;
+            float[] speeds = { Progression.StartSpeed, 8f, 11f, Progression.MaxSpeed };
 
-            foreach (var difficulty in Tiers.All)
+            foreach (float speed in speeds)
             {
-                var tier = Tiers.For(difficulty);
+                var pace = Progression.PaceAt(speed);
                 var random = new System.Random(42);
                 int doubles = 0, defenders = 0, blockers = 0;
 
                 for (int i = 0; i < rows; i++)
                 {
-                    var row = CourseGenerator.Next(tier, random);
+                    var row = CourseGenerator.Next(pace, random);
 
                     if (row.Lanes == null || row.Lanes.Length != CourseGenerator.LaneCount)
                     {
-                        Debug.LogError($"[Verify] {difficulty}: a row does not have {CourseGenerator.LaneCount} lanes.");
+                        Debug.LogError($"[Verify] {speed} m/s: a row does not have {CourseGenerator.LaneCount} lanes.");
                         failures++;
                         break;
                     }
@@ -181,14 +186,14 @@ namespace Dribble.EditorTools
                     int blocked = row.Lanes.Count(b => b != Blocker.None);
                     if (blocked == 0 || blocked >= CourseGenerator.LaneCount)
                     {
-                        Debug.LogError($"[Verify] {difficulty}: a row blocks {blocked} lanes.");
+                        Debug.LogError($"[Verify] {speed} m/s: a row blocks {blocked} lanes.");
                         failures++;
                         break;
                     }
 
                     if (row.StarLane >= 0 && row.Lanes[row.StarLane] != Blocker.None)
                     {
-                        Debug.LogError($"[Verify] {difficulty}: stars were put on a blocker.");
+                        Debug.LogError($"[Verify] {speed} m/s: stars were put on a blocker.");
                         failures++;
                         break;
                     }
@@ -200,13 +205,13 @@ namespace Dribble.EditorTools
 
                 float doubleRate = doubles / (float)rows;
                 float defenderRate = defenders / (float)Mathf.Max(1, blockers);
-                failures += Require(Mathf.Abs(doubleRate - tier.DoubleBlockChance) < 0.03f,
-                    $"{difficulty}: {doubleRate:P0} double rows, expected about {tier.DoubleBlockChance:P0}.");
-                failures += Require(Mathf.Abs(defenderRate - tier.DefenderShare) < 0.03f,
-                    $"{difficulty}: {defenderRate:P0} defenders, expected about {tier.DefenderShare:P0}.");
+                failures += Require(Mathf.Abs(doubleRate - pace.DoubleBlockChance) < 0.03f,
+                    $"{speed} m/s: {doubleRate:P0} double rows, expected about {pace.DoubleBlockChance:P0}.");
+                failures += Require(Mathf.Abs(defenderRate - pace.DefenderShare) < 0.03f,
+                    $"{speed} m/s: {defenderRate:P0} defenders, expected about {pace.DefenderShare:P0}.");
             }
 
-            if (failures == 0) Debug.Log($"[Verify] Course generator: OK ({rows * Tiers.All.Length} rows checked).");
+            if (failures == 0) Debug.Log($"[Verify] Course generator: OK ({rows * speeds.Length} rows checked).");
             return failures;
         }
 
@@ -301,10 +306,8 @@ namespace Dribble.EditorTools
             if (hud != null)
             {
                 failures += Require(hud.StartButton != null, "HUD start button is not wired.");
-                failures += Require(hud.DifficultyButtons != null && hud.DifficultyButtons.Length == Tiers.All.Length,
-                    "HUD does not have a button for every level.");
                 var texts = hud.GetComponentsInChildren<Text>(true);
-                failures += Require(texts.Length >= 15, $"HUD looks under-built ({texts.Length} text elements).");
+                failures += Require(texts.Length >= 8, $"HUD looks under-built ({texts.Length} text elements).");
                 foreach (var text in texts)
                 {
                     failures += Require(text.font != null && text.font.name.Contains("Fredoka"),
@@ -316,8 +319,8 @@ namespace Dribble.EditorTools
 
                 var hudObject = new SerializedObject(hud);
                 foreach (var field in new[] { "scaler", "counters", "scoreText", "distanceText", "starsText", "toastText",
-                             "hintText", "overlay", "dim", "card", "titleText", "badge", "starRow", "bodyText", "captionText",
-                             "startButton", "startButtonLabel", "pickedFace", "pickedEdge", "restingFace", "restingEdge" })
+                             "hintText", "overlay", "dim", "card", "titleText", "badge", "starRow", "bodyText",
+                             "startButton", "startButtonLabel" })
                     failures += Require(hudObject.FindProperty(field).objectReferenceValue != null, $"HUD.{field} is not wired.");
                 var fills = hudObject.FindProperty("starFills");
                 failures += Require(fills.arraySize == 3, "The end card does not have 3 star slots.");
@@ -355,9 +358,9 @@ namespace Dribble.EditorTools
         }
 
         /// <summary>
-        /// Drives the course for several minutes of running on every level, as the
-        /// game would: the pools never run dry, items are recycled, and no row ever
-        /// walls off all three lanes.
+        /// Drives the course for six minutes of running, as the game would - well
+        /// past top speed: the pools never run dry, items are recycled, and no row
+        /// ever walls off all three lanes.
         /// </summary>
         static int CheckCourseSimulation()
         {
@@ -365,40 +368,32 @@ namespace Dribble.EditorTools
             var course = Object.FindFirstObjectByType<Course>();
             if (course == null) return 1;
 
-            foreach (var difficulty in Tiers.All)
+            course.Begin(Progression.StartSpeed);
+            const float dt = 1f / 30f;
+            float time = 0f;
+            int peak = 0;
+            for (int step = 0; step < 30 * 360; step++)
             {
-                var tier = Tiers.For(difficulty);
-                course.Begin(tier, tier.StartSpeed);
+                time += dt;
+                float speed = Progression.SpeedAt(time);
+                course.Advance(speed * dt, speed);
+                peak = Mathf.Max(peak, course.Active.Count);
 
-                const float dt = 1f / 30f;
-                float time = 0f;
-                int peak = 0;
-                // Six minutes - well past top speed on every level.
-                for (int step = 0; step < 30 * 360; step++)
+                if (step % 15 != 0) continue;
+                var blockersByRow = course.Active
+                    .Where(i => i.Kind != ItemKind.Star && i.gameObject.activeSelf)
+                    .GroupBy(i => Mathf.RoundToInt(i.transform.localPosition.z * 10f));
+                if (blockersByRow.Any(g => g.Select(i => i.Lane).Distinct().Count() >= CourseGenerator.LaneCount))
                 {
-                    time += dt;
-                    float speed = tier.SpeedAt(time);
-                    course.Advance(speed * dt, speed);
-                    peak = Mathf.Max(peak, course.Active.Count);
-
-                    if (step % 15 != 0) continue;
-                    var blockersByRow = course.Active
-                        .Where(i => i.Kind != ItemKind.Star && i.gameObject.activeSelf)
-                        .GroupBy(i => Mathf.RoundToInt(i.transform.localPosition.z * 10f));
-                    if (blockersByRow.Any(g => g.Select(i => i.Lane).Distinct().Count() >= CourseGenerator.LaneCount))
-                    {
-                        Debug.LogError($"[Verify] {difficulty}: a row walled off every lane at {time:0}s.");
-                        failures++;
-                        break;
-                    }
+                    Debug.LogError($"[Verify] A row walled off every lane at {time:0}s.");
+                    failures++;
+                    break;
                 }
-
-                failures += Require(course.Shortfalls == 0,
-                    $"{difficulty}: the pools ran dry {course.Shortfalls} time(s) - make them bigger.");
-                Debug.Log($"[Verify] {difficulty}: {peak} items live at most, top speed {tier.MaxSpeed} m/s.");
             }
 
-            if (failures == 0) Debug.Log("[Verify] Course simulation: OK.");
+            failures += Require(course.Shortfalls == 0,
+                $"The pools ran dry {course.Shortfalls} time(s) - make them bigger.");
+            if (failures == 0) Debug.Log($"[Verify] Course simulation: OK (6 minutes, {peak} items live at most).");
             return failures;
         }
 
@@ -409,13 +404,29 @@ namespace Dribble.EditorTools
             foreach (var clip in new[] { "Crowd", "Whistle", "Cheer", "Ohh", "Applause" })
                 failures += Require(Resources.Load<AudioClip>("Audio/" + clip) != null, $"Audio clip '{clip}' is missing.");
 
+            // The club's music: every clip loads, the anthem and drums loop and the
+            // stings do not, and DribbleAudio actually plays each one it lists.
+            // MusicStar ships but is deliberately unused: the end card's stars keep
+            // their rising chime, so the two never double up.
+            string audioCode = File.ReadAllText("Assets/Scripts/Runtime/DribbleAudio.cs");
+            foreach (var (clip, loop) in DribbleAudio.Music)
+            {
+                failures += Require(DribbleAudio.Load("Music/" + clip) != null, $"Music clip '{clip}' is missing.");
+                bool shouldLoop = clip == "MusicAnthem" || clip == "MusicDrums";
+                failures += Require(loop == shouldLoop, $"Music clip '{clip}' should {(shouldLoop ? "" : "not ")}loop.");
+                if (clip != "MusicStar")
+                    failures += Require(audioCode.Contains($"Load(\"Music/{clip}\")"), $"Music clip '{clip}' is not wired into DribbleAudio.");
+            }
+            failures += Require(audioCode.Contains("anthemSource = LoopSource(") && audioCode.Contains("drumsSource = LoopSource("),
+                "The anthem and drums are not on looping sources.");
+
             string page = File.Exists(TemplatePath) ? File.ReadAllText(TemplatePath) : "";
             failures += Require(page.Contains("SendMessage(\"DribbleAudio\", \"SetMuted\""),
                 "The web template does not mute through DribbleAudio.SetMuted.");
             failures += Require(page.Contains("../../app.js"), "The web template does not load the shared app.js.");
             failures += Require(page.Contains("manifest.webmanifest"), "The web template lost its PWA tags.");
 
-            if (failures == 0) Debug.Log("[Verify] Audio and web page: OK.");
+            if (failures == 0) Debug.Log("[Verify] Audio, music and web page: OK.");
             return failures;
         }
 
@@ -446,6 +457,8 @@ namespace Dribble.EditorTools
             PlayerSettings.productName = "Dribble";
             PlayerSettings.companyName = "Maccabi Netanya Games";
             PlayerSettings.runInBackground = true;
+            // The game opens straight into its countdown; a splash would eat it.
+            PlayerSettings.SplashScreen.show = false;
 
             var options = new BuildPlayerOptions
             {

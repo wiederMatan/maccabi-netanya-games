@@ -29,7 +29,6 @@ namespace Dribble
 
         readonly List<PitchItem> active = new List<PitchItem>();
         System.Random random = new System.Random();
-        TierSettings tier;
         float untilNextRow;
 
         public IReadOnlyList<PitchItem> Active => active;
@@ -59,9 +58,8 @@ namespace Dribble
         }
 
         /// <summary>Clear the pitch and lay out the opening rows of a new run.</summary>
-        public void Begin(TierSettings settings, float speed)
+        public void Begin(float speed)
         {
-            tier = settings;
             random = new System.Random();
 
             foreach (var item in AllItems()) item.gameObject.SetActive(false);
@@ -72,7 +70,7 @@ namespace Dribble
             while (z < SpawnDistance)
             {
                 float gap = RowGap(speed);
-                SpawnRow(z, gap);
+                SpawnRow(z, gap, speed);
                 z += gap;
             }
             untilNextRow = z - SpawnDistance;
@@ -82,7 +80,7 @@ namespace Dribble
         {
             // A little variety, never so tight a lane change cannot be made.
             float jitter = 0.85f + (float)random.NextDouble() * 0.35f;
-            return Mathf.Max(7f, speed * tier.RowGapSeconds * jitter);
+            return Mathf.Max(7f, speed * Progression.PaceAt(speed).RowGapSeconds * jitter);
         }
 
         /// <summary>Slide the whole pitch toward the camera by <paramref name="distance"/> metres.</summary>
@@ -124,14 +122,14 @@ namespace Dribble
             while (untilNextRow <= 0f)
             {
                 float gap = RowGap(speed);
-                SpawnRow(SpawnDistance + untilNextRow, gap);
+                SpawnRow(SpawnDistance + untilNextRow, gap, speed);
                 untilNextRow += gap;
             }
         }
 
-        void SpawnRow(float z, float gapToNext)
+        void SpawnRow(float z, float gapToNext, float speed)
         {
-            var row = CourseGenerator.Next(tier, random);
+            var row = CourseGenerator.Next(Progression.PaceAt(speed), random);
 
             for (int lane = 0; lane < CourseGenerator.LaneCount; lane++)
             {
