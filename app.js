@@ -47,6 +47,10 @@
                  'music-anthem', 'music-drums', 'music-goal', 'music-win', 'music-star', 'music-tryagain'];
     // Background music loops, with the volume each one plays at.
     var MUSIC_VOLUME = { anthem: 0.3, drums: 0.22 };
+    // Exact musical length of each loop. AAC encoding pads the end of a file
+    // (the drums by ~14 ms), which would stutter at every repeat, so loop on
+    // the bar line instead of the end of the decoded buffer.
+    var MUSIC_LOOP = { anthem: 16 * 4 * 60 / 128, drums: 4 * 4 * 60 / 118 };
     var base = (document.currentScript && document.currentScript.src || '/app.js').replace(/app\.js.*$/, 'sounds/');
     var ctx = null, master = null, buffers = {}, loading = null, unlocked = false;
     var crowd = null, crowdGain = null, wantCrowd = false;
@@ -170,6 +174,10 @@
       musicGain = ctx.createGain();
       music.buffer = buffers['music-' + name];
       music.loop = true;
+      if (MUSIC_LOOP[name] && MUSIC_LOOP[name] < music.buffer.duration) {
+        music.loopStart = 0;
+        music.loopEnd = MUSIC_LOOP[name];
+      }
       musicGain.gain.setValueAtTime(0, ctx.currentTime);
       musicGain.gain.linearRampToValueAtTime(MUSIC_VOLUME[name] || 0.25, ctx.currentTime + 0.8);
       music.connect(musicGain).connect(master);
